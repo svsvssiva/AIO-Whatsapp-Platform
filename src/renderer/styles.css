@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --titlebar-bg: rgba(246, 246, 246, 0.72);
+  --rail-divider: rgba(0, 0, 0, 0.08);
+  --text: #1d1d1f;
+  --text-muted: #86868b;
+  --ring-focus: #0a84ff;
+  --state-live: #30d158;
+  --state-loading: #ff9f0a;
+  --state-error: #ff453a;
+  --state-offline: #8e8e93;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --titlebar-bg: rgba(28, 28, 30, 0.72);
+    --rail-divider: rgba(255, 255, 255, 0.08);
+    --text: #f2f2f7;
+    --text-muted: #98989d;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+button {
+  outline: none;
+}
+button:focus-visible {
+  outline: 2px solid var(--ring-focus);
+  outline-offset: 2px;
+}
+
+.tile {
+  transition: transform 160ms ease-out, opacity 160ms ease-out;
+}
+.tile:hover {
+  transform: scale(1.04);
+  opacity: 1 !important;
+}
+
+webview {
+  display: inline-flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: opacity 160ms ease-out;
+  }
+  .tile:hover {
+    transform: none;
+  }
+}

@@ -1,0 +1,40 @@
+appId: com.internal.gchat
+productName: GChat
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - out/**/*
+  - package.json
+asar: true
+mac:
+  category: public.app-category.social-networking
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  identity: null
+  extendInfo:
+    NSMicrophoneUsageDescription: GChat needs the microphone for WhatsApp voice and video calls.
+    NSCameraUsageDescription: GChat needs the camera for WhatsApp video calls and QR scanning.
+    NSUserNotificationsUsageDescription: GChat shows native macOS notifications for incoming WhatsApp messages.
+    LSApplicationCategoryType: public.app-category.social-networking
+    LSMinimumSystemVersion: '11.0'
+dmg:
+  artifactName: GChat-${version}-${arch}.dmg
+  writeUpdateInfo: true
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+publish:
+  - provider: github
+    owner: svsvssiva
+    repo: AIO-Whatsapp-Platform
+    releaseType: release
