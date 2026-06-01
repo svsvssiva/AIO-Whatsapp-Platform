@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Sparkles, NotebookPen } from 'lucide-react';
+import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Sparkles, NotebookPen, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { SettingsAiTab } from './SettingsAiTab';
 import { SettingsMemoryTab } from './SettingsMemoryTab';
-import type { AccountStorageInfo, AppSettings, NotificationPrefs } from '../../shared/types';
+import type { AccountStorageInfo, AppSettings, NotificationPrefs, UpdateStatus } from '../../shared/types';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../shared/types';
 import { useAccountsStore } from '../stores/accountsStore';
 
@@ -290,17 +290,96 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose, onOpenMemory }) 
               <div style={{ color: 'var(--text-muted)' }}>
                 Multi-account WhatsApp Web for macOS. Each account runs in an isolated browser session.
               </div>
+              <UpdateSection />
               <div style={{ color: 'var(--text-muted)' }}>
                 Tip: right-click any account tile for rename, icon, color, reload, log out, or remove.
               </div>
-              <div className="pt-3 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                Version 0.1.0 · Internal use only
+              <div className="pt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                Internal use only
               </div>
             </div>
           )}
         </div>
       </aside>
     </>
+  );
+};
+
+const UpdateSection: React.FC = () => {
+  const [version, setVersion] = useState('');
+  const [isPackaged, setIsPackaged] = useState(true);
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const [checking, setChecking] = useState(false);
+  const [checkedOnce, setCheckedOnce] = useState(false);
+
+  useEffect(() => {
+    window.gchat.update.getInfo().then((i) => {
+      setVersion(i.version);
+      setIsPackaged(i.isPackaged);
+      setStatus(i.status);
+    });
+    const off = window.gchat.update.onStatus((s) => {
+      setStatus(s);
+      if (s.state !== 'checking') setChecking(false);
+    });
+    return off;
+  }, []);
+
+  const onCheck = async () => {
+    setChecking(true);
+    setCheckedOnce(true);
+    await window.gchat.update.check();
+  };
+
+  const dev = !isPackaged || status.state === 'disabled-dev';
+  const available = status.state === 'available';
+  const downloading = status.state === 'downloading';
+  const ready = status.state === 'ready';
+  const isChecking = checking || status.state === 'checking';
+
+  let line: React.ReactNode;
+  if (dev) line = <span style={{ color: 'var(--text-muted)' }}>Updates are disabled in development mode.</span>;
+  else if (isChecking) line = <span style={{ color: 'var(--text-muted)' }}>Checking for updates…</span>;
+  else if (available) line = <span style={{ color: '#0A84FF' }}>Update available — v{status.version}</span>;
+  else if (downloading) line = <span style={{ color: '#0A84FF' }}>Downloading… {status.percent}%</span>;
+  else if (ready) line = <span style={{ color: '#30D158' }}>v{status.version} ready to install</span>;
+  else if (status.state === 'error') line = <span style={{ color: '#FF453A' }}>Update check failed — please try again.</span>;
+  else if (checkedOnce) line = <span style={{ color: '#30D158' }}>You're on the latest version.</span>;
+  else line = <span style={{ color: 'var(--text-muted)' }}>Check whether a newer version is available.</span>;
+
+  const btnBase = 'text-[12px] px-2.5 py-1 rounded-md font-medium inline-flex items-center gap-1';
+
+  return (
+    <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+          Updates
+        </span>
+        <span className="text-[12px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+          v{version || '…'}
+        </span>
+      </div>
+      <div className="text-[12px] mb-2.5">{line}</div>
+      {ready ? (
+        <button onClick={() => window.gchat.update.install()} className={btnBase} style={{ background: '#30D158', color: '#fff' }}>
+          <CheckCircle2 size={12} /> Restart &amp; Install
+        </button>
+      ) : available ? (
+        <button onClick={() => window.gchat.update.openDownload()} className={btnBase} style={{ background: '#0A84FF', color: '#fff' }}>
+          <Download size={12} /> Download update
+        </button>
+      ) : (
+        <button
+          onClick={onCheck}
+          disabled={dev || isChecking}
+          className={btnBase}
+          style={{ background: 'rgba(10,132,255,0.15)', color: '#0A84FF', opacity: dev || isChecking ? 0.5 : 1 }}
+        >
+          <RefreshCw size={12} className={isChecking ? 'animate-spin' : ''} />
+          {isChecking ? 'Checking…' : 'Check for updates'}
+        </button>
+      )}
+    </div>
   );
 };
 
