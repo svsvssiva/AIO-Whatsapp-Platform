@@ -146,6 +146,10 @@ const api = {
       ipcRenderer.invoke(IPC.AI_GENERATE_FROM_PAYLOAD, payload),
     insertText: (accountId: string, text: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.AI_INSERT_TEXT, accountId, text),
+    showSuggestion: (accountId: string, text: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.AI_SHOW_SUGGESTION, accountId, text),
+    clearSuggestion: (accountId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.AI_CLEAR_SUGGESTION, accountId),
   },
 
   pills: {
@@ -198,6 +202,7 @@ const api = {
       ipcRenderer.invoke(IPC.UPDATE_GET_VERSION),
     check: (): Promise<{ ok: true }> => ipcRenderer.invoke(IPC.UPDATE_CHECK),
     install: (): Promise<{ ok: true }> => ipcRenderer.invoke(IPC.UPDATE_INSTALL),
+    openDownload: (): Promise<{ ok: true }> => ipcRenderer.invoke(IPC.UPDATE_DOWNLOAD),
     onStatus: (cb: (status: UpdateStatus) => void) => {
       const listener = (_: unknown, status: UpdateStatus) => cb(status);
       ipcRenderer.on(IPC.UPDATE_STATUS, listener);

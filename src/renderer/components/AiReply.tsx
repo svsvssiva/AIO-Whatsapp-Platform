@@ -13,6 +13,13 @@ import {
 import { useAccountsStore } from '../stores/accountsStore';
 import type { AISettings, PreparedPayload, ScrapedConversation } from '../../shared/types';
 
+// Chats whose "review before sending" step the user has already cleared. Once a
+// chat is in here, later AI requests for it skip the preview and generate
+// directly. Scope: per chat (account + title), per app session — module-level
+// state resets only when the renderer reloads.
+const confirmedChats = new Set<string>();
+const chatKeyOf = (accountId: string, chatTitle: string) => `${accountId}::${chatTitle}`;
+
 interface Props {
   onOpenSettings: () => void;
   triggerRef?: React.MutableRefObject<{ trigger: () => void } | null>;
@@ -67,14 +74,37 @@ export const AiReply: React.FC<Props> = ({ onOpenSettings, triggerRef }) => {
       setState({ kind: 'error', code: prep.code, message: prep.error });
       return;
     }
+    // Per chat, per session: once the review step has been cleared for this
+    // chat, skip it and generate directly — no second confirmation prompt.
+    if (confirmedChats.has(chatKeyOf(activeId, conv.chatTitle))) {
+      send(prep.payload);
+      return;
+    }
     setState({ kind: 'preview', payload: prep.payload });
   };
 
   const send = async (payload: PreparedPayload) => {
+    // The review step has now been cleared for this chat — remember it so the
+    // next request in the same chat (this session) generates without asking.
+    if (activeId) confirmedChats.add(chatKeyOf(activeId, payload.meta.chatTitle));
     setState({ kind: 'loading' });
     const res = await window.gchat.ai.generateFromPayload(payload);
-    if (res.ok) setState({ kind: 'ready', text: res.text });
-    else setState({ kind: 'error', code: res.code, message: res.error });
+    if (!res.ok) {
+      setState({ kind: 'error', code: res.code, message: res.error });
+      return;
+    }
+    // Deliver the reply as a bar inside WhatsApp, just above the compose box, so
+    // it reads inline and the user can Send/Edit it there. Fall back to the
+    // in-app popover if the bar can't be injected into the page.
+    if (activeId) {
+      const shown = await window.gchat.ai.showSuggestion(activeId, res.text);
+      if (shown.ok) {
+        setOpen(false);
+        setState({ kind: 'idle' });
+        return;
+      }
+    }
+    setState({ kind: 'ready', text: res.text });
   };
 
   const handlePillClick = async () => {

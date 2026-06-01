@@ -1,7 +1,12 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { IPC } from '../shared/ipc';
 import type { UpdateStatus } from '../shared/types';
+
+// Where users download a new build. The app is unsigned, so macOS won't let
+// electron-updater silently self-install — instead we surface the banner and
+// send users here to grab the new DMG.
+const RELEASES_URL = 'https://github.com/svsvssiva/AIO-Whatsapp-Platform/releases/latest';
 
 let lastStatus: UpdateStatus = { state: 'idle' };
 
@@ -23,8 +28,10 @@ export function startUpdater(win: BrowserWindow) {
     return;
   }
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Unsigned builds can't be self-installed by Squirrel.Mac, so don't download
+  // in the background — just detect and let the banner link to the DMG.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.allowDowngrade = false;
 
   autoUpdater.on('checking-for-update', () => {
@@ -63,6 +70,13 @@ export function startUpdater(win: BrowserWindow) {
 export function installUpdateNow() {
   if (!app.isPackaged) return;
   autoUpdater.quitAndInstall(false, true);
+}
+
+// Open the GitHub releases page so the user can download the new DMG manually.
+export function openDownloadPage(): void {
+  shell.openExternal(RELEASES_URL).catch((e) => {
+    console.warn('[gchat-updater] openExternal failed:', e?.message);
+  });
 }
 
 export function checkNow(): void {

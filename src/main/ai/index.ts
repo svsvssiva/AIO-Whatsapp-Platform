@@ -1,6 +1,6 @@
 import type { AISettings, ScrapedConversation, ScrapedMessage } from '../../shared/types';
 import { DEFAULT_REDACTION_PREFS } from '../../shared/types';
-import { buildSystemPrompt } from './prompts';
+import { buildSystemPrompt, textOnly, lastTextInbound } from './prompts';
 import { AIError, generate as openaiGenerate, ping as openaiPing, OpenAIMessage } from './providers/openai';
 import { loadKey } from './keys';
 import { applyRedaction } from './redact';
@@ -23,13 +23,6 @@ export async function testKey(): Promise<{ ok: true } | { ok: false; error: stri
   }
 }
 
-function findLastInbound(messages: ScrapedMessage[]): ScrapedMessage | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].direction === 'in' && messages[i].text) return messages[i];
-  }
-  return null;
-}
-
 export async function generateReply(
   settings: AISettings,
   conv: ScrapedConversation,
@@ -48,9 +41,11 @@ export async function generateReply(
     return r.text;
   };
 
+  // Last N messages, then keep only real text — images, stickers, videos,
+  // voice notes and documents are dropped before anything reaches the model.
   const trimmedRaw: ScrapedMessage[] = conv.messages.slice(-Math.max(3, settings.contextMessages));
-  const trimmed: ScrapedMessage[] = trimmedRaw.map((m) => ({ ...m, text: redact(m.text) }));
-  const lastInbound = findLastInbound(trimmed);
+  const textMsgs: ScrapedMessage[] = textOnly(trimmedRaw).map((m) => ({ ...m, text: redact(m.text) }));
+  const lastInbound = lastTextInbound(textMsgs);
 
   const aboutMeRedacted = redact(settings.aboutMe || '');
   const memoryRedacted = redact(memory);
@@ -59,6 +54,7 @@ export async function generateReply(
     settings,
     chatTitle: conv.chatTitle || 'this chat',
     isGroup: conv.isGroup,
+    transcript: textMsgs,
     lastInbound,
     aboutMe: aboutMeRedacted,
     memory: memoryRedacted,
@@ -66,15 +62,13 @@ export async function generateReply(
 
   // Real conversation array — the model sees turns as a proper dialogue.
   // From OpenAI's POV: 'user' = the OTHER person (incoming), 'assistant' = our user (outgoing).
-  const convoMessages: OpenAIMessage[] = trimmed
-    .filter((m) => m.text && m.text.trim().length > 0)
-    .map<OpenAIMessage>((m) => {
-      if (m.direction === 'in') {
-        const senderTag = conv.isGroup && m.sender ? `${m.sender}: ` : '';
-        return { role: 'user', content: senderTag + m.text };
-      }
-      return { role: 'assistant', content: m.text };
-    });
+  const convoMessages: OpenAIMessage[] = textMsgs.map<OpenAIMessage>((m) => {
+    if (m.direction === 'in') {
+      const senderTag = conv.isGroup && m.sender ? `${m.sender}: ` : '';
+      return { role: 'user', content: senderTag + m.text };
+    }
+    return { role: 'assistant', content: m.text };
+  });
 
   // Final nudge so the model produces a NEW reply (not just echo prior assistant)
   convoMessages.push({

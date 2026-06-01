@@ -60,6 +60,8 @@ interface GChatAPI {
       payload: PreparedPayload,
     ) => Promise<{ ok: true; text: string } | { ok: false; code: string; error: string }>;
     insertText: (accountId: string, text: string) => Promise<{ ok: boolean; error?: string }>;
+    showSuggestion: (accountId: string, text: string) => Promise<{ ok: boolean; error?: string }>;
+    clearSuggestion: (accountId: string) => Promise<{ ok: boolean }>;
   };
 
   pills: {
@@ -93,6 +95,7 @@ interface GChatAPI {
     getInfo: () => Promise<{ version: string; status: UpdateStatus; isPackaged: boolean }>;
     check: () => Promise<{ ok: true }>;
     install: () => Promise<{ ok: true }>;
+    openDownload: () => Promise<{ ok: true }>;
     onStatus: (cb: (status: UpdateStatus) => void) => () => void;
   };
   onOpenSettings: (cb: () => void) => () => void;

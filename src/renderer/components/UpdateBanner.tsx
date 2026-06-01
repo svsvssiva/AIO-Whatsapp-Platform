@@ -30,7 +30,7 @@ export const UpdateBanner: React.FC = () => {
   const border = isReady ? 'rgba(48,209,88,0.45)' : 'rgba(10,132,255,0.40)';
 
   let label = '';
-  if (isAvailable) label = `Update available — v${status.version} downloading…`;
+  if (isAvailable) label = `Update available — v${status.version}`;
   if (isDownloading) label = `Downloading update… ${status.percent}%`;
   if (isReady) label = `Update v${status.version} ready — restart to install`;
 
@@ -55,6 +55,15 @@ export const UpdateBanner: React.FC = () => {
           style={{ background: '#30D158' }}
         >
           Restart & Install
+        </button>
+      )}
+      {isAvailable && (
+        <button
+          onClick={() => window.gchat.update.openDownload()}
+          className="app-no-drag px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-white"
+          style={{ background: '#0A84FF' }}
+        >
+          Download
         </button>
       )}
       {(isAvailable || isDownloading) && (

@@ -55,6 +55,8 @@ export const IPC = {
   AI_SCRAPE_ACTIVE: 'ai:scrape-active',
   AI_PREPARE: 'ai:prepare',
   AI_GENERATE_FROM_PAYLOAD: 'ai:generate-from-payload',
+  AI_SHOW_SUGGESTION: 'ai:show-suggestion',
+  AI_CLEAR_SUGGESTION: 'ai:clear-suggestion',
 
   PILLS_LIST: 'pills:list',
   PILLS_SET_PREFS: 'pills:set-prefs',
@@ -82,5 +84,6 @@ export const IPC = {
   UPDATE_STATUS: 'update:status',
   UPDATE_CHECK: 'update:check',
   UPDATE_INSTALL: 'update:install',
+  UPDATE_DOWNLOAD: 'update:download',
   UPDATE_GET_VERSION: 'update:get-version',
 } as const;

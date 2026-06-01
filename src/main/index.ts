@@ -47,7 +47,7 @@ import type { PreparedPayload } from './ai';
 import { clearKey as aiClearKey, hasKey as aiHasKey, saveKey as aiSaveKey } from './ai/keys';
 import { syncChatToMemory } from './ai/sync';
 import * as mem from './memory';
-import { checkNow as updateCheckNow, getCurrentStatus as getUpdateStatus, installUpdateNow, startUpdater } from './updater';
+import { checkNow as updateCheckNow, getCurrentStatus as getUpdateStatus, installUpdateNow, openDownloadPage, startUpdater } from './updater';
 import type { AISettings, ScrapedConversation } from '../shared/types';
 
 registerAvatarSchemePrivileged();
@@ -690,6 +690,158 @@ ipcMain.handle(IPC.AI_INSERT_TEXT, async (_e, accountId: string, text: string) =
   }
 });
 
+// Show the suggested reply as a bar inside the WhatsApp page, in normal flow
+// directly above the compose footer. Because it's inserted as a flex sibling of
+// the footer, the message list shrinks to make room — no messages are hidden.
+ipcMain.handle(IPC.AI_SHOW_SUGGESTION, async (_e, accountId: string, text: string) => {
+  const target = findWcForAccount(accountId);
+  if (!target) return { ok: false, error: 'No webview for this account.' };
+  try {
+    const script = `
+(function() {
+  try {
+    var TEXT = ${JSON.stringify(text)};
+    var BARID = 'gchat-suggestion-bar';
+    function findCompose() {
+      return document.querySelector('footer div[contenteditable="true"][role="textbox"]')
+        || document.querySelector('footer div[contenteditable="true"]')
+        || document.querySelector('[data-testid="conversation-compose-box-input"]')
+        || document.querySelector('div[role="textbox"][contenteditable="true"]');
+    }
+    function findFooter() {
+      var c = findCompose();
+      if (c) { var f = c.closest('footer'); if (f) return f; }
+      return document.querySelector('#main footer') || document.querySelector('footer');
+    }
+    function insertIntoCompose(t) {
+      var compose = findCompose();
+      if (!compose) return false;
+      compose.focus();
+      try { var sel = window.getSelection(); var r = document.createRange(); r.selectNodeContents(compose); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch (e) {}
+      try { if (document.execCommand('insertText', false, t)) return true; } catch (e) {}
+      try {
+        compose.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: t }));
+        compose.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: t }));
+        return true;
+      } catch (e) { return false; }
+    }
+    function clickSend() {
+      var tries = 0;
+      (function attempt() {
+        tries++;
+        var icon = document.querySelector('footer [data-icon="send"]') || document.querySelector('footer span[data-icon="send"]');
+        var btn = icon ? (icon.closest('button') || icon.parentElement)
+          : (document.querySelector('footer button[aria-label="Send"]') || document.querySelector('footer [data-testid="send"]'));
+        if (btn) { btn.click(); return; }
+        if (tries < 15) setTimeout(attempt, 50);
+      })();
+    }
+    var obs = null;
+    function removeBar() {
+      if (obs) { try { obs.disconnect(); } catch (e) {} obs = null; }
+      var ex = document.getElementById(BARID);
+      if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
+    }
+    function chatTitle() {
+      var t = document.querySelector('#main header span[dir="auto"][title]')
+        || document.querySelector('#main header span[title]')
+        || document.querySelector('#main header span[dir="auto"]');
+      return t ? (t.getAttribute('title') || t.textContent || '') : '';
+    }
+
+    removeBar();
+    var footer = findFooter();
+    if (!footer || !footer.parentNode) return { ok: false, error: 'compose-not-found' };
+
+    var dark = (document.body && document.body.classList.contains('dark')) || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var bg = dark ? '#1f2c33' : '#ffffff';
+    var border = dark ? '#2a3942' : '#e9edef';
+    var fg = dark ? '#e9edef' : '#111b21';
+    var sub = dark ? '#8696a0' : '#667781';
+    var chip = dark ? '#2a3942' : '#f0f2f5';
+
+    var bar = document.createElement('div');
+    bar.id = BARID;
+    bar.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:8px 14px;width:100%;box-sizing:border-box;background:' + bg + ';border-top:1px solid ' + border + ';color:' + fg + ';flex:0 0 auto;position:relative;z-index:5;';
+
+    var label = document.createElement('div');
+    label.textContent = '✨';
+    label.style.cssText = 'font-size:16px;line-height:22px;flex:0 0 auto;';
+
+    var textWrap = document.createElement('div');
+    textWrap.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;';
+    var cap = document.createElement('div');
+    cap.textContent = 'Suggested reply — click text to edit before sending';
+    cap.style.cssText = 'font-size:11px;color:' + sub + ';';
+    var body = document.createElement('div');
+    body.textContent = TEXT;
+    body.title = 'Click to drop this into the message box for editing';
+    body.style.cssText = 'font-size:14px;line-height:1.4;color:' + fg + ';white-space:pre-wrap;word-break:break-word;max-height:84px;overflow-y:auto;cursor:text;';
+    textWrap.appendChild(cap); textWrap.appendChild(body);
+
+    function mkBtn(t, primary) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = t;
+      b.style.cssText = 'flex:0 0 auto;border:none;border-radius:16px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;' + (primary ? 'background:#0A84FF;color:#fff;' : 'background:' + chip + ';color:' + fg + ';');
+      return b;
+    }
+    var editBtn = mkBtn('Edit', false);
+    var sendBtn = mkBtn('Send', true);
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button'; closeBtn.textContent = '✕'; closeBtn.title = 'Dismiss';
+    closeBtn.style.cssText = 'flex:0 0 auto;border:none;background:transparent;color:' + sub + ';font-size:15px;cursor:pointer;padding:6px 8px;line-height:1;';
+
+    var btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;align-items:center;gap:6px;flex:0 0 auto;align-self:center;';
+    btns.appendChild(editBtn); btns.appendChild(sendBtn); btns.appendChild(closeBtn);
+
+    bar.appendChild(label); bar.appendChild(textWrap); bar.appendChild(btns);
+
+    // Keep clicks from reaching WhatsApp's own handlers.
+    bar.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    editBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); insertIntoCompose(TEXT); removeBar(); });
+    sendBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); var ok = insertIntoCompose(TEXT); removeBar(); if (ok) clickSend(); });
+    closeBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); removeBar(); });
+    body.addEventListener('click', function(e){ e.stopPropagation(); insertIntoCompose(TEXT); removeBar(); });
+
+    footer.parentNode.insertBefore(bar, footer);
+
+    // Auto-dismiss if the user switches to a different chat (WhatsApp reuses the
+    // same footer DOM across chats, so a stale suggestion must not linger — its
+    // Send button would otherwise fire into the wrong conversation).
+    var sig0 = chatTitle();
+    var mainEl = document.querySelector('#main');
+    if (mainEl && window.MutationObserver) {
+      obs = new MutationObserver(function() { if (chatTitle() !== sig0) removeBar(); });
+      try { obs.observe(mainEl, { subtree: true, childList: true, characterData: true }); } catch (e) {}
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+})();
+`;
+    const res = (await target.executeJavaScript(script, true)) as { ok: boolean; error?: string };
+    return res || { ok: false, error: 'No response' };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+ipcMain.handle(IPC.AI_CLEAR_SUGGESTION, async (_e, accountId: string) => {
+  const target = findWcForAccount(accountId);
+  if (!target) return { ok: false };
+  try {
+    await target.executeJavaScript(
+      `(function(){var b=document.getElementById('gchat-suggestion-bar');if(b&&b.parentNode)b.parentNode.removeChild(b);return {ok:true};})();`,
+      true,
+    );
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+});
+
 // -------------------- MEMORY --------------------
 
 ipcMain.handle(IPC.MEMORY_GET, async (_e, accountId: string, chatKey: string) => {
@@ -762,6 +914,10 @@ ipcMain.handle(IPC.UPDATE_CHECK, () => {
 });
 ipcMain.handle(IPC.UPDATE_INSTALL, () => {
   installUpdateNow();
+  return { ok: true };
+});
+ipcMain.handle(IPC.UPDATE_DOWNLOAD, () => {
+  openDownloadPage();
   return { ok: true };
 });
 
