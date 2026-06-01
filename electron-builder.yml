@@ -7,6 +7,9 @@ files:
   - out/**/*
   - package.json
 asar: true
+# Ad-hoc sign the packaged .app so Apple Silicon doesn't reject the unsigned
+# build as "damaged". Not a Developer ID signature — see scripts/afterPack.cjs.
+afterPack: ./scripts/afterPack.cjs
 mac:
   category: public.app-category.social-networking
   target:
