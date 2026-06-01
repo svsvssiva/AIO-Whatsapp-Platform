@@ -251,6 +251,7 @@ export const AiReply: React.FC<Props> = ({ onOpenSettings, triggerRef }) => {
             {state.kind === 'preview' && (
               <PreviewBody
                 payload={state.payload}
+                scrapeDiag={lastConvRef.current?.diag}
                 onChange={(p) => setState({ kind: 'preview', payload: p })}
                 onSend={() => send(state.payload)}
                 onCancel={onDiscard}
@@ -313,10 +314,11 @@ export const AiReply: React.FC<Props> = ({ onOpenSettings, triggerRef }) => {
 
 const PreviewBody: React.FC<{
   payload: PreparedPayload;
+  scrapeDiag?: { pre: number; total: number; parsed: number; main: boolean };
   onChange: (p: PreparedPayload) => void;
   onSend: () => void;
   onCancel: () => void;
-}> = ({ payload, onChange, onSend, onCancel }) => {
+}> = ({ payload, scrapeDiag, onChange, onSend, onCancel }) => {
   const [confirmed, setConfirmed] = useState(false);
   const [showSystem, setShowSystem] = useState(false);
 
@@ -388,6 +390,18 @@ const PreviewBody: React.FC<{
       <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
         Conversation being sent ({payload.messages.length} message{payload.messages.length === 1 ? '' : 's'}):
       </div>
+
+      {payload.messages.length === 0 && scrapeDiag && (
+        <div
+          className="text-[11px] px-2 py-1.5 rounded-md"
+          style={{ background: 'rgba(255,159,10,0.10)', color: '#FF9F0A' }}
+        >
+          Couldn't read messages from this chat. Scraper found{' '}
+          <strong>{scrapeDiag.parsed}</strong> text of <strong>{scrapeDiag.total}</strong> bubbles
+          (data-pre-plain-text: {scrapeDiag.pre}, #main: {scrapeDiag.main ? 'yes' : 'no'}). Open the
+          chat fully and try again — if it stays 0, send this line to support.
+        </div>
+      )}
 
       <div className="space-y-1.5">
         {payload.messages.map((m, i) => (

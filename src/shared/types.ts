@@ -137,6 +137,9 @@ export interface ScrapedConversation {
   chatTitle: string;
   isGroup: boolean;
   messages: ScrapedMessage[];
+  // Scraper diagnostics — counts of bubbles found per strategy. Surfaced in the
+  // preview only when 0 messages were read, to debug WhatsApp DOM changes.
+  diag?: { pre: number; total: number; parsed: number; main: boolean };
 }
 
 export interface PillPrefs {

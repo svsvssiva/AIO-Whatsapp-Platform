@@ -558,31 +558,36 @@ const SCRAPE_SCRIPT = `
     var subEl = document.querySelector('header [aria-label]');
     var sub = subEl ? subEl.getAttribute('aria-label') || '' : '';
     if (/group/i.test(sub)) isGroup = true;
-    if (!isGroup) {
-      var firstBubble = document.querySelector('div.copyable-text');
-      var pre = firstBubble ? firstBubble.getAttribute('data-pre-plain-text') || '' : '';
-      if (/]\\s*[^:]+:\\s*$/.test(pre)) isGroup = true;
-    }
     return { title: title || 'this chat', isGroup: isGroup };
   }
 
   function parseBubble(bubble) {
     var direction = 'in';
-    var ancestor = bubble.closest('.message-in, .message-out');
-    if (ancestor && ancestor.classList.contains('message-out')) direction = 'out';
-    else if (ancestor && ancestor.classList.contains('message-in')) direction = 'in';
+    // Most stable signal: WhatsApp tags each message row data-id="true_..."
+    // (sent by me) or "false_..." (received).
+    var idEl = bubble.closest('[data-id]');
+    var did = idEl ? (idEl.getAttribute('data-id') || '') : '';
+    if (did.indexOf('true_') === 0) direction = 'out';
+    else if (did.indexOf('false_') === 0) direction = 'in';
     else {
-      var cur = bubble;
-      while (cur && cur !== document.body) {
-        if (cur.classList && cur.classList.contains('message-out')) { direction = 'out'; break; }
-        if (cur.classList && cur.classList.contains('message-in')) { direction = 'in'; break; }
-        cur = cur.parentElement;
+      var ancestor = bubble.closest('.message-in, .message-out');
+      if (ancestor && ancestor.classList.contains('message-out')) direction = 'out';
+      else if (ancestor && ancestor.classList.contains('message-in')) direction = 'in';
+      else {
+        var cur = bubble;
+        while (cur && cur !== document.body) {
+          if (cur.classList && cur.classList.contains('message-out')) { direction = 'out'; break; }
+          if (cur.classList && cur.classList.contains('message-in')) { direction = 'in'; break; }
+          cur = cur.parentElement;
+        }
       }
     }
     var textNode =
-      bubble.querySelector('.selectable-text.copyable-text') ||
       bubble.querySelector('span.selectable-text') ||
-      bubble.querySelector('[data-lexical-text="true"]');
+      bubble.querySelector('.selectable-text') ||
+      bubble.querySelector('[data-lexical-text="true"]') ||
+      bubble.querySelector('span[dir="ltr"]') ||
+      bubble.querySelector('span[dir="auto"]');
     var text = (textNode && textNode.textContent || '').trim();
     if (!text) {
       if (bubble.querySelector('[data-icon="media-play"], [data-icon="audio-play"]')) text = '[voice note]';
@@ -594,6 +599,7 @@ const SCRAPE_SCRIPT = `
     }
     var sender, ts;
     var pre = bubble.getAttribute('data-pre-plain-text') || '';
+    if (!pre) { var pel = bubble.querySelector('[data-pre-plain-text]'); pre = pel ? (pel.getAttribute('data-pre-plain-text') || '') : ''; }
     if (pre) {
       var m = pre.match(/^\\[([^\\]]+)\\]\\s*([^:]+):\\s*$/);
       if (m) { ts = m[1].trim(); sender = m[2].trim(); }
@@ -603,14 +609,41 @@ const SCRAPE_SCRIPT = `
 
   try {
     var info = getChatTitle();
+    var root = document.querySelector('#main') || document;
+
+    // Collect message bubbles by the most stable signal first, then dedupe.
+    // 1) data-pre-plain-text — text bubbles carry it (class-name independent).
+    // 2) div.copyable-text — legacy wrapper.
+    // 3) div[role="row"] — last resort; getText() digs out the text span.
+    var bubbles = [];
+    var seen = [];
+    function add(el){ if(!el) return; for(var s=0;s<seen.length;s++){ if(seen[s]===el) return; } seen.push(el); bubbles.push(el); }
+    var byAttr = root.querySelectorAll('[data-pre-plain-text]');
+    for (var a=0;a<byAttr.length;a++) add(byAttr[a]);
+    if (!bubbles.length) {
+      var byClass = root.querySelectorAll('div.copyable-text');
+      for (var c=0;c<byClass.length;c++) add(byClass[c]);
+    }
+    if (!bubbles.length) {
+      var rows = root.querySelectorAll('div[role="row"]');
+      for (var r=0;r<rows.length;r++) add(rows[r]);
+    }
+
     var msgs = [];
-    var bubbles = document.querySelectorAll('div.copyable-text');
+    var senderSet = {};
     for (var i = 0; i < bubbles.length; i++) {
       var m = parseBubble(bubbles[i]);
-      if (m && m.text) msgs.push(m);
+      if (m && m.text) {
+        msgs.push(m);
+        if (m.direction === 'in' && m.sender) senderSet[m.sender] = 1;
+      }
     }
+    // Group heuristic: more than one distinct incoming sender => group chat.
+    var distinct = 0; for (var key in senderSet) { if (senderSet.hasOwnProperty(key)) distinct++; }
+    if (distinct > 1) info.isGroup = true;
+
     var recent = msgs.slice(-50);
-    return { ok: true, data: { chatTitle: info.title, isGroup: info.isGroup, messages: recent } };
+    return { ok: true, data: { chatTitle: info.title, isGroup: info.isGroup, messages: recent, diag: { pre: byAttr.length, total: bubbles.length, parsed: msgs.length, main: !!document.querySelector('#main') } } };
   } catch (err) {
     return { ok: false, error: (err && err.message) || String(err) };
   }
