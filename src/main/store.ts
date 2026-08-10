@@ -63,13 +63,32 @@ export const saveWindowState = (s: WindowState) => store.set('windowState', s);
 
 export const getSettings = (): AppSettings => {
   const raw = store.get('settings') as Partial<AppSettings> | undefined;
+
+  // Migration: the AI-reply and chat-memory features were removed. Rebuild the
+  // ai block from known keys only, so leftovers from that era (aboutMe, tone,
+  // length, language, redaction, contextMessages) — which could hold personal
+  // text — are dropped from the config file on the next save.
+  const rawAi = (raw?.ai ?? {}) as Record<string, unknown>;
+  const ai: AISettings = {
+    enabled: typeof rawAi.enabled === 'boolean' ? rawAi.enabled : DEFAULT_AI_SETTINGS.enabled,
+    hasApiKey: false, // always computed at call time, never persisted
+    model: typeof rawAi.model === 'string' ? rawAi.model : DEFAULT_AI_SETTINGS.model,
+    variantCount:
+      typeof rawAi.variantCount === 'number'
+        ? Math.max(1, Math.min(3, rawAi.variantCount))
+        : DEFAULT_AI_SETTINGS.variantCount,
+  };
+
+  const { aiLockouts: _dropped, ...rest } = (raw ?? {}) as Partial<AppSettings> & {
+    aiLockouts?: unknown;
+  };
+
   return {
     ...DEFAULT_SETTINGS,
-    ...(raw ?? {}),
-    ai: { ...DEFAULT_AI_SETTINGS, ...(raw?.ai ?? {}) },
+    ...rest,
+    ai,
     pills: { ...DEFAULT_PILL_PREFS, ...(raw?.pills ?? {}) },
     chatPins: raw?.chatPins ?? {},
-    aiLockouts: raw?.aiLockouts ?? {},
   };
 };
 
@@ -93,19 +112,6 @@ export const toggleChatPin = (accountId: string, chatKey: string): string[] => {
   return next;
 };
 
-export const getAiLockouts = (accountId: string): string[] => {
-  return getSettings().aiLockouts?.[accountId] ?? [];
-};
-export const isAiLocked = (accountId: string, chatKey: string): boolean => {
-  return getAiLockouts(accountId).includes(chatKey);
-};
-export const toggleAiLockout = (accountId: string, chatKey: string): string[] => {
-  const cur = getAiLockouts(accountId);
-  const next = cur.includes(chatKey) ? cur.filter((c) => c !== chatKey) : [...cur, chatKey];
-  const s = getSettings();
-  saveSettings({ aiLockouts: { ...(s.aiLockouts ?? {}), [accountId]: next } });
-  return next;
-};
 export const saveSettings = (s: Partial<AppSettings>) => {
   store.set('settings', { ...getSettings(), ...s });
 };

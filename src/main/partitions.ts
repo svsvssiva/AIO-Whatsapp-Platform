@@ -8,6 +8,16 @@ export function configurePartition(accountId: string) {
 
   ses.setUserAgent(WA_USER_AGENT);
 
+  // Spell checking for the WhatsApp composer. On macOS this delegates to the
+  // system spell checker, which auto-detects language and uses the user's own
+  // learned words — so we must NOT call setSpellCheckerLanguages there (it is
+  // unsupported on darwin and throws).
+  try {
+    ses.spellCheckerEnabled = true;
+  } catch {
+    /* older Electron without the property — spellcheck webPreference still applies */
+  }
+
   ses.setPermissionRequestHandler((_wc, permission, cb) => {
     const allow = new Set(['notifications', 'media', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
     cb(allow.has(permission));

@@ -17,9 +17,9 @@ export async function generate(
   apiKey: string,
   model: string,
   messages: OpenAIMessage[],
-  opts: { maxTokens?: number; temperature?: number; timeoutMs?: number } = {},
+  opts: { maxTokens?: number; temperature?: number; timeoutMs?: number; jsonMode?: boolean } = {},
 ): Promise<string> {
-  const { maxTokens = 400, temperature = 0.7, timeoutMs = 20000 } = opts;
+  const { maxTokens = 400, temperature = 0.7, timeoutMs = 20000, jsonMode = false } = opts;
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
@@ -38,6 +38,7 @@ export async function generate(
         max_tokens: maxTokens,
         temperature,
         n: 1,
+        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: controller.signal,
     });

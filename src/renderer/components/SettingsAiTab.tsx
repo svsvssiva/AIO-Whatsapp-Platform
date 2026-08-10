@@ -1,15 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Eye, EyeOff, AlertCircle, Sparkles } from 'lucide-react';
-import {
-  AI_LANGUAGES,
-  AI_MODELS,
-  AI_TONES,
-  AISettings,
-  AITone,
-  AILength,
-  RedactionPrefs,
-  DEFAULT_REDACTION_PREFS,
-} from '../../shared/types';
+import { Eye, EyeOff, AlertCircle, Check, ShieldCheck } from 'lucide-react';
+import { AI_MODELS, AISettings } from '../../shared/types';
 
 export const SettingsAiTab: React.FC = () => {
   const [settings, setSettings] = useState<AISettings | null>(null);
@@ -20,21 +11,21 @@ export const SettingsAiTab: React.FC = () => {
   >({ kind: 'idle' });
   const [savingKey, setSavingKey] = useState(false);
 
-  const refresh = async () => {
-    const s = await window.gchat.ai.getSettings();
-    setSettings(s);
-  };
+  const refresh = async () => setSettings(await window.gchat.ai.getSettings());
 
   useEffect(() => {
     refresh();
   }, []);
 
-  if (!settings) return <div className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
+  if (!settings) {
+    return (
+      <div className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        Loading…
+      </div>
+    );
+  }
 
-  const update = async (patch: Partial<AISettings>) => {
-    const next = await window.gchat.ai.setSettings(patch);
-    setSettings(next);
-  };
+  const update = async (patch: Partial<AISettings>) => setSettings(await window.gchat.ai.setSettings(patch));
 
   const saveKey = async () => {
     if (!keyInput.trim()) return;
@@ -47,11 +38,9 @@ export const SettingsAiTab: React.FC = () => {
     }
     setKeyInput('');
     await refresh();
-    // Auto-test
     setTestState({ kind: 'testing' });
     const t = await window.gchat.ai.testKey();
-    if (t.ok) setTestState({ kind: 'ok' });
-    else setTestState({ kind: 'err', msg: t.error });
+    setTestState(t.ok ? { kind: 'ok' } : { kind: 'err', msg: t.error });
   };
 
   const clearKey = async () => {
@@ -63,22 +52,34 @@ export const SettingsAiTab: React.FC = () => {
   const runTest = async () => {
     setTestState({ kind: 'testing' });
     const t = await window.gchat.ai.testKey();
-    if (t.ok) setTestState({ kind: 'ok' });
-    else setTestState({ kind: 'err', msg: t.error });
+    setTestState(t.ok ? { kind: 'ok' } : { kind: 'err', msg: t.error });
   };
 
   return (
     <div className="space-y-4">
-      {/* Master toggle */}
       <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
         <Toggle
-          label="Enable AI reply"
+          label="Enable Rephrase"
           checked={settings.enabled}
-          onChange={(v) => update({ enabled: v, acknowledgedPrivacy: settings.acknowledgedPrivacy || v })}
+          onChange={(v) => update({ enabled: v })}
         />
         <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-          Adds a floating sparkle button to each chat. Tap it to draft a reply.
+          Adds a <strong>Rephrase</strong> button next to the WhatsApp message box. Type a message,
+          click it, and pick from a few corrected versions. Shortcut: ⌘⇧R.
         </p>
+      </div>
+
+      {/* What actually leaves the machine — stated plainly. */}
+      <div
+        className="rounded-lg p-3 flex items-start gap-2"
+        style={{ background: 'rgba(48,209,88,0.10)' }}
+      >
+        <ShieldCheck size={14} style={{ color: '#30D158', marginTop: 1, flexShrink: 0 }} />
+        <div className="text-[11px]" style={{ color: 'var(--text)', lineHeight: 1.5 }}>
+          <strong>Your chats are never sent anywhere.</strong> Only the message you have typed into
+          the box is sent to OpenAI, and only when you click Rephrase. Conversation history,
+          contacts and received messages are never read.
+        </div>
       </div>
 
       {/* API key */}
@@ -153,60 +154,40 @@ export const SettingsAiTab: React.FC = () => {
             <button
               onClick={saveKey}
               disabled={!keyInput.trim() || savingKey}
-              className="text-[12px] px-3 py-1.5 rounded-md font-medium text-white"
-              style={{ background: '#0A84FF', opacity: keyInput.trim() && !savingKey ? 1 : 0.5 }}
+              className="text-[12px] px-2.5 py-1.5 rounded-md font-medium text-white"
+              style={{ background: '#0A84FF', opacity: !keyInput.trim() || savingKey ? 0.5 : 1 }}
             >
               {savingKey ? 'Saving…' : 'Save'}
             </button>
           </div>
         )}
 
+        {testState.kind === 'ok' && (
+          <div className="flex items-center gap-1.5 mt-2 text-[11px]" style={{ color: '#30D158' }}>
+            <Check size={12} /> Key works.
+          </div>
+        )}
         {testState.kind === 'err' && (
-          <div className="flex items-start gap-1.5 mt-2">
-            <AlertCircle size={12} style={{ color: '#FF453A', marginTop: 2 }} />
-            <span className="text-[11px]" style={{ color: '#FF453A' }}>
-              {testState.msg}
-            </span>
+          <div className="flex items-start gap-1.5 mt-2 text-[11px]" style={{ color: '#FF453A' }}>
+            <AlertCircle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
+            {testState.msg}
           </div>
         )}
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
-          Stored encrypted in your macOS Keychain. Never sent anywhere except OpenAI.
+          Stored in your macOS Keychain. Get one at platform.openai.com/api-keys.
         </p>
       </div>
 
-      {/* About Me */}
-      <Section title="About me (used in every AI reply)">
-        <textarea
-          value={settings.aboutMe ?? ''}
-          onChange={(e) => update({ aboutMe: e.target.value })}
-          placeholder="I am Alex, Account Manager at Acme Corp. I sign off as 'Cheers, Alex'. I prefer polite, concise replies in English unless the contact writes in another language."
-          className="w-full text-[13px] px-2 py-1.5 rounded-md outline-none resize-none"
-          style={{
-            background: 'rgba(0,0,0,0.06)',
-            color: 'var(--text)',
-            border: '1px solid var(--rail-divider)',
-            minHeight: 120,
-            fontFamily: 'inherit',
-            lineHeight: 1.5,
-          }}
-        />
-        <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
-          Always sent as part of the AI prompt. Add your name, role, voice quirks, signature, language preference.
-        </p>
-      </Section>
-
       {/* Model */}
-      <Section title="Model">
+      <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
+        <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text)' }}>
+          Model
+        </div>
         <select
           value={settings.model}
           onChange={(e) => update({ model: e.target.value })}
-          className="w-full bg-transparent text-[13px] outline-none"
-          style={{
-            color: 'var(--text)',
-            border: '1px solid var(--rail-divider)',
-            borderRadius: 6,
-            padding: '6px 8px',
-          }}
+          className="w-full text-[12px] px-2 py-1.5 rounded-md bg-transparent"
+          style={{ color: 'var(--text)', border: '1px solid var(--rail-divider)' }}
         >
           {AI_MODELS.map((m) => (
             <option key={m.id} value={m.id}>
@@ -214,255 +195,68 @@ export const SettingsAiTab: React.FC = () => {
             </option>
           ))}
         </select>
-      </Section>
+      </div>
 
-      {/* Tone */}
-      <Section title="Tone">
-        <div className="flex flex-wrap gap-1.5">
-          {AI_TONES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => update({ tone: t.id })}
-              className="text-[12px] px-2.5 py-1 rounded-full"
-              style={{
-                background: settings.tone === t.id ? '#0A84FF' : 'rgba(0,0,0,0.06)',
-                color: settings.tone === t.id ? '#fff' : 'var(--text)',
-                border: '1px solid transparent',
-              }}
-              title={t.blurb}
-            >
-              {t.label}
-            </button>
-          ))}
+      {/* Variant count */}
+      <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+            Options per rephrase
+          </span>
+          <span className="text-[13px] tabular-nums" style={{ color: 'var(--text)' }}>
+            {settings.variantCount}
+          </span>
         </div>
-        {settings.tone === 'custom' && (
-          <textarea
-            value={settings.customTone ?? ''}
-            onChange={(e) => update({ customTone: e.target.value })}
-            placeholder="Describe your tone — e.g. 'witty, dry, never uses exclamation marks'"
-            className="w-full text-[13px] mt-2 px-2 py-1.5 rounded-md outline-none resize-none"
-            style={{
-              background: 'rgba(0,0,0,0.06)',
-              color: 'var(--text)',
-              border: '1px solid var(--rail-divider)',
-              minHeight: 60,
-            }}
-          />
-        )}
-      </Section>
-
-      {/* Length */}
-      <Section title="Length">
-        <div
-          className="inline-flex rounded-lg overflow-hidden"
-          style={{ border: '1px solid var(--rail-divider)' }}
-        >
-          {(['brief', 'medium', 'detailed'] as AILength[]).map((l) => (
-            <button
-              key={l}
-              onClick={() => update({ length: l })}
-              className="text-[12px] px-3 py-1.5"
-              style={{
-                background: settings.length === l ? '#0A84FF' : 'transparent',
-                color: settings.length === l ? '#fff' : 'var(--text)',
-              }}
-            >
-              {l[0].toUpperCase() + l.slice(1)}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {/* Context */}
-      <Section title={`Send last ${settings.contextMessages} messages`}>
         <input
           type="range"
-          min={5}
-          max={50}
+          min={1}
+          max={3}
           step={1}
-          value={settings.contextMessages}
-          onChange={(e) => update({ contextMessages: parseInt(e.target.value, 10) })}
+          value={settings.variantCount}
+          onChange={(e) => update({ variantCount: parseInt(e.target.value, 10) })}
           className="w-full"
         />
-        <div className="flex justify-between text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          <span>5</span>
-          <span>50</span>
-        </div>
-      </Section>
-
-      {/* Custom instructions */}
-      <Section title="Custom instructions">
-        <textarea
-          value={settings.customInstructions ?? ''}
-          onChange={(e) => update({ customInstructions: e.target.value })}
-          placeholder="e.g. always sign off with 'Cheers, Alex'"
-          className="w-full text-[13px] px-2 py-1.5 rounded-md outline-none resize-none"
-          style={{
-            background: 'rgba(0,0,0,0.06)',
-            color: 'var(--text)',
-            border: '1px solid var(--rail-divider)',
-            minHeight: 70,
-          }}
-        />
-      </Section>
-
-      {/* Language */}
-      <Section title="Reply language">
-        <select
-          value={settings.language}
-          onChange={(e) => update({ language: e.target.value })}
-          className="w-full bg-transparent text-[13px] outline-none"
-          style={{
-            color: 'var(--text)',
-            border: '1px solid var(--rail-divider)',
-            borderRadius: 6,
-            padding: '6px 8px',
-          }}
-        >
-          {AI_LANGUAGES.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-      </Section>
-
-      {/* Redaction (credential filter) */}
-      <Section title="Redaction (don't send credentials to AI)">
-        <RedactionEditor
-          value={{ ...DEFAULT_REDACTION_PREFS, ...(settings.redaction ?? {}) }}
-          onChange={(r) => update({ redaction: r })}
-        />
-      </Section>
-
-      {/* Privacy */}
-      <details className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
-        <summary className="text-[12px] font-semibold cursor-pointer" style={{ color: 'var(--text)' }}>
-          Privacy
-        </summary>
-        <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
-          When you tap the AI button on a chat, GChat reads the last{' '}
-          <strong>{settings.contextMessages}</strong> messages from that conversation and sends them
-          to OpenAI to draft a reply. WhatsApp's end-to-end encryption protects messages in transit
-          between you and contacts; this AI feature is a separate channel from your Mac to OpenAI.
-          You can turn it off at the top of this tab any time, or clear your key.
+        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+          How many rewrites to show: minimal fix, smoother, then clearer. Each keeps your meaning,
+          tone and language — it corrects the writing rather than restyling it.
         </p>
-      </details>
+      </div>
     </div>
   );
 };
-
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
-    <div className="text-[12px] font-semibold mb-1.5" style={{ color: 'var(--text)' }}>
-      {title}
-    </div>
-    {children}
-  </div>
-);
 
 const StatusPill: React.FC<{ kind: 'ok' | 'err' | 'muted'; children: React.ReactNode }> = ({
   kind,
   children,
 }) => {
-  const colors =
-    kind === 'ok'
-      ? { bg: 'rgba(48,209,88,0.15)', fg: '#30D158' }
-      : kind === 'err'
-      ? { bg: 'rgba(255,69,58,0.15)', fg: '#FF453A' }
-      : { bg: 'rgba(0,0,0,0.08)', fg: 'var(--text-muted)' };
+  const map = {
+    ok: { bg: 'rgba(48,209,88,0.15)', fg: '#30D158' },
+    err: { bg: 'rgba(255,69,58,0.15)', fg: '#FF453A' },
+    muted: { bg: 'rgba(120,120,128,0.15)', fg: 'var(--text-muted)' },
+  }[kind];
   return (
     <span
-      className="text-[11px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1"
-      style={{ background: colors.bg, color: colors.fg }}
+      className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+      style={{ background: map.bg, color: map.fg }}
     >
-      {kind === 'ok' && <Check size={10} />}
       {children}
     </span>
   );
 };
 
-const RedactionEditor: React.FC<{ value: RedactionPrefs; onChange: (v: RedactionPrefs) => void }> = ({ value, onChange }) => {
-  const set = <K extends keyof RedactionPrefs>(k: K, v: RedactionPrefs[K]) =>
-    onChange({ ...value, [k]: v });
-
-  const ROWS: Array<{ key: keyof RedactionPrefs; label: string; hint: string }> = [
-    { key: 'apiKeys', label: 'API keys', hint: 'sk-…, AKIA…, ghp_…, xox_, AIza…, JWT, etc.' },
-    { key: 'tokens', label: 'Tokens & passwords', hint: '"password: …", "token: …", Bearer tokens' },
-    { key: 'otpCodes', label: 'OTP / verification codes', hint: '"OTP: 1234", "verification code 567890"' },
-    { key: 'creditCards', label: 'Credit cards', hint: 'Luhn-valid 13–19 digit numbers' },
-    { key: 'iban', label: 'Bank IBANs', hint: 'Country-prefix IBAN format' },
-    { key: 'emails', label: 'Email addresses', hint: 'Off by default — emails are often valid context' },
-    { key: 'phones', label: 'Phone numbers', hint: 'Off by default — many WA chats reference numbers' },
-    { key: 'longNumbers', label: 'Any 10+ digit number', hint: 'Aggressive catch-all (IC, bank acct, etc.)' },
-  ];
-
-  return (
-    <div className="space-y-1.5">
-      <Toggle label="Enable redaction" checked={value.enabled} onChange={(v) => set('enabled', v)} />
-      <p className="text-[11px] mb-1" style={{ color: 'var(--text-muted)' }}>
-        Each message is scanned before being sent to OpenAI. Matches become <code>[REDACTED:…]</code> in the prompt.
-        The original messages in WhatsApp are NOT changed.
-      </p>
-      <div className="rounded-md p-2" style={{ background: 'rgba(0,0,0,0.04)', opacity: value.enabled ? 1 : 0.5 }}>
-        {ROWS.map((r) => (
-          <div key={r.key} className="py-1">
-            <Toggle
-              label={r.label}
-              checked={!!value[r.key]}
-              disabled={!value.enabled}
-              onChange={(v) => set(r.key, v as never)}
-            />
-            <p className="text-[11px] ml-1" style={{ color: 'var(--text-muted)' }}>
-              {r.hint}
-            </p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2">
-        <span className="text-[12px] font-medium" style={{ color: 'var(--text)' }}>
-          Custom patterns
-        </span>
-        <p className="text-[11px] mb-1" style={{ color: 'var(--text-muted)' }}>
-          One regex per line. Case-insensitive. Invalid patterns are silently ignored.
-        </p>
-        <textarea
-          value={(value.customPatterns ?? []).join('\n')}
-          onChange={(e) => set('customPatterns', e.target.value.split('\n'))}
-          placeholder={'\\bMYR\\s?\\d{4,}\\b\nproject-codename-x'}
-          className="w-full text-[12px] px-2 py-1.5 rounded-md outline-none resize-none"
-          style={{
-            background: 'rgba(0,0,0,0.06)',
-            color: 'var(--text)',
-            border: '1px solid var(--rail-divider)',
-            minHeight: 70,
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          }}
-        />
-      </div>
-    </div>
-  );
-};
-
-const Toggle: React.FC<{ label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }> = ({
+const Toggle: React.FC<{ label: string; checked: boolean; onChange: (v: boolean) => void }> = ({
   label,
   checked,
-  disabled,
   onChange,
 }) => (
-  <label
-    className="flex items-center justify-between"
-    style={{ opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
-  >
-    <span className="flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
-      <Sparkles size={13} style={{ color: '#0A84FF' }} />
+  <label className="flex items-center justify-between py-0.5 cursor-pointer">
+    <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
       {label}
     </span>
     <button
       role="switch"
       aria-checked={checked}
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
+      onClick={() => onChange(!checked)}
       style={{
         width: 34,
         height: 20,
@@ -470,6 +264,7 @@ const Toggle: React.FC<{ label: string; checked: boolean; disabled?: boolean; on
         background: checked ? '#30D158' : 'rgba(120,120,128,0.32)',
         position: 'relative',
         transition: 'background 160ms',
+        flexShrink: 0,
       }}
     >
       <span

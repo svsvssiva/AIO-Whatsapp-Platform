@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { AccountRail } from './components/AccountRail';
 import { WebviewHost, wcIdByAccount } from './components/WebviewHost';
 import { EmptyState } from './components/EmptyState';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SettingsPanel } from './components/SettingsPanel';
-import { MemoryDrawer } from './components/MemoryDrawer';
 import { RenameDialog } from './components/RenameDialog';
 import { UpdateBanner } from './components/UpdateBanner';
 import { useAccountsStore } from './stores/accountsStore';
@@ -16,8 +15,6 @@ export const App: React.FC = () => {
   const [quickOpen, setQuickOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; label: string } | null>(null);
-  const [memoryTarget, setMemoryTarget] = useState<{ accountId: string; chatKey: string } | null>(null);
-  const aiReplyRef = useRef<{ trigger: () => void } | null>(null);
 
   const refresh = async () => {
     const list = await window.gchat.listAccounts();
@@ -85,9 +82,6 @@ export const App: React.FC = () => {
       }
     });
     const offOpenSettings = window.gchat.onOpenSettings(() => setSettingsOpen(true));
-    const offMemOpen = window.gchat.memory.onOpenDrawer((accountId, chatKey) => {
-      setMemoryTarget({ accountId, chatKey });
-    });
     const offInspect = window.gchat.onMenuInspectActive(() => {
       const cur = useAccountsStore.getState().activeId;
       if (!cur) return;
@@ -105,11 +99,6 @@ export const App: React.FC = () => {
           setActive(a.id);
         }
       }
-      // ⌘⇧R — generate AI reply for active account
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        aiReplyRef.current?.trigger();
-      }
     };
     window.addEventListener('keydown', onKey);
 
@@ -122,7 +111,6 @@ export const App: React.FC = () => {
       offCtx();
       offOpenSettings();
       offInspect();
-      offMemOpen();
       window.removeEventListener('keydown', onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,27 +125,11 @@ export const App: React.FC = () => {
         {accounts.length === 0 ? (
           <EmptyState onAdd={handleAdd} />
         ) : (
-          <WebviewHost
-            accounts={accounts}
-            activeId={activeId}
-            reloadKeys={reloadKeys}
-            onOpenSettings={() => setSettingsOpen(true)}
-            aiReplyRef={aiReplyRef}
-          />
+          <WebviewHost accounts={accounts} activeId={activeId} reloadKeys={reloadKeys} />
         )}
       </div>
       <QuickSwitcher open={quickOpen} onClose={() => setQuickOpen(false)} />
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onOpenMemory={(accountId, chatKey) => setMemoryTarget({ accountId, chatKey })}
-      />
-      <MemoryDrawer
-        open={!!memoryTarget}
-        accountId={memoryTarget?.accountId ?? ''}
-        chatKey={memoryTarget?.chatKey ?? ''}
-        onClose={() => setMemoryTarget(null)}
-      />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <RenameDialog
         open={!!renameTarget}
         initialValue={renameTarget?.label ?? ''}

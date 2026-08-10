@@ -5,11 +5,8 @@ import type {
   AccountStorageInfo,
   AISettings,
   AppSettings,
-  ChatMemoryMeta,
   NotificationPrefs,
   PillPrefs,
-  PreparedPayload,
-  ScrapedConversation,
   UpdateStatus,
 } from '../shared/types';
 
@@ -126,30 +123,6 @@ const api = {
     clearKey: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.AI_CLEAR_KEY),
     testKey: (): Promise<{ ok: true } | { ok: false; error: string; code?: string }> =>
       ipcRenderer.invoke(IPC.AI_TEST_KEY),
-    scrapeActive: (
-      accountId: string,
-    ): Promise<{ ok: boolean; data?: ScrapedConversation; error?: string }> =>
-      ipcRenderer.invoke(IPC.AI_SCRAPE_ACTIVE, accountId),
-    generate: (
-      conversation: ScrapedConversation,
-      accountId?: string,
-    ): Promise<{ ok: true; text: string } | { ok: false; code: string; error: string }> =>
-      ipcRenderer.invoke(IPC.AI_GENERATE, { conversation, accountId }),
-    prepare: (
-      conversation: ScrapedConversation,
-      accountId?: string,
-    ): Promise<{ ok: true; payload: PreparedPayload } | { ok: false; code: string; error: string }> =>
-      ipcRenderer.invoke(IPC.AI_PREPARE, { conversation, accountId }),
-    generateFromPayload: (
-      payload: PreparedPayload,
-    ): Promise<{ ok: true; text: string } | { ok: false; code: string; error: string }> =>
-      ipcRenderer.invoke(IPC.AI_GENERATE_FROM_PAYLOAD, payload),
-    insertText: (accountId: string, text: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC.AI_INSERT_TEXT, accountId, text),
-    showSuggestion: (accountId: string, text: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC.AI_SHOW_SUGGESTION, accountId, text),
-    clearSuggestion: (accountId: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke(IPC.AI_CLEAR_SUGGESTION, accountId),
   },
 
   pills: {
@@ -157,44 +130,6 @@ const api = {
     list: (accountId: string): Promise<string[]> => ipcRenderer.invoke(IPC.PILLS_LIST, accountId),
     setPrefs: (patch: Partial<PillPrefs>): Promise<PillPrefs> =>
       ipcRenderer.invoke(IPC.PILLS_SET_PREFS, patch),
-  },
-
-  memory: {
-    get: (accountId: string, chatKey: string): Promise<{ ok: boolean; content: string; exists: boolean }> =>
-      ipcRenderer.invoke(IPC.MEMORY_GET, accountId, chatKey),
-    save: (accountId: string, chatKey: string, content: string): Promise<{ ok: boolean; bytes: number; updatedAt: number }> =>
-      ipcRenderer.invoke(IPC.MEMORY_SAVE, accountId, chatKey, content),
-    create: (accountId: string, chatKey: string): Promise<{ ok: boolean; content: string }> =>
-      ipcRenderer.invoke(IPC.MEMORY_CREATE, accountId, chatKey),
-    delete: (accountId: string, chatKey: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke(IPC.MEMORY_DELETE, accountId, chatKey),
-    listForAccount: (accountId: string): Promise<ChatMemoryMeta[]> =>
-      ipcRenderer.invoke(IPC.MEMORY_LIST_FOR_ACCOUNT, accountId),
-    listAll: (): Promise<ChatMemoryMeta[]> => ipcRenderer.invoke(IPC.MEMORY_LIST_ALL),
-    reveal: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.MEMORY_REVEAL),
-    openFile: (accountId: string, chatKey: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke(IPC.MEMORY_OPEN_FILE, accountId, chatKey),
-    aiSync: (
-      accountId: string,
-    ): Promise<{ ok: true; added: number; content: string } | { ok: false; error: string; code?: string }> =>
-      ipcRenderer.invoke(IPC.MEMORY_AI_SYNC, accountId),
-    onOpenDrawer: (cb: (accountId: string, chatKey: string) => void) => {
-      const listener = (_: unknown, accountId: string, chatKey: string) => cb(accountId, chatKey);
-      ipcRenderer.on(IPC.MEMORY_OPEN_DRAWER, listener);
-      return () => ipcRenderer.removeListener(IPC.MEMORY_OPEN_DRAWER, listener);
-    },
-  },
-
-  aiLockout: {
-    get: (accountId: string): Promise<string[]> => ipcRenderer.invoke(IPC.AI_LOCKOUT_GET, accountId),
-    isLocked: (accountId: string, chatKey: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC.AI_LOCKOUT_IS_LOCKED, accountId, chatKey),
-    onChanged: (cb: (accountId: string, chatKey: string, locked: boolean) => void) => {
-      const listener = (_: unknown, accountId: string, chatKey: string, locked: boolean) =>
-        cb(accountId, chatKey, locked);
-      ipcRenderer.on(IPC.AI_LOCKOUT_CHANGED, listener);
-      return () => ipcRenderer.removeListener(IPC.AI_LOCKOUT_CHANGED, listener);
-    },
   },
 
   update: {

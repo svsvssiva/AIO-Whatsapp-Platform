@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Sparkles, NotebookPen, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Sparkles, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { SettingsAiTab } from './SettingsAiTab';
-import { SettingsMemoryTab } from './SettingsMemoryTab';
 import type { AccountStorageInfo, AppSettings, NotificationPrefs, UpdateStatus } from '../../shared/types';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../shared/types';
 import { useAccountsStore } from '../stores/accountsStore';
@@ -9,10 +8,9 @@ import { useAccountsStore } from '../stores/accountsStore';
 interface Props {
   open: boolean;
   onClose: () => void;
-  onOpenMemory?: (accountId: string, chatKey: string) => void;
 }
 
-type Tab = 'notifications' | 'storage' | 'ai' | 'memory' | 'about';
+type Tab = 'notifications' | 'storage' | 'ai' | 'about';
 
 function fmt(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -30,7 +28,7 @@ function relTime(ts: number): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export const SettingsPanel: React.FC<Props> = ({ open, onClose, onOpenMemory }) => {
+export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
   const { accounts } = useAccountsStore();
   const [tab, setTab] = useState<Tab>('notifications');
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -93,8 +91,7 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose, onOpenMemory }) 
           {([
             ['notifications', Bell, 'Notifications'],
             ['storage', HardDrive, 'Storage'],
-            ['ai', Sparkles, 'AI'],
-            ['memory', NotebookPen, 'Memory'],
+            ['ai', Sparkles, 'Rephrase'],
             ['about', Info, 'About'],
           ] as Array<[Tab, typeof Bell, string]>).map(([key, Icon, label]) => (
             <button
@@ -274,15 +271,6 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose, onOpenMemory }) 
           )}
 
           {tab === 'ai' && <SettingsAiTab />}
-
-          {tab === 'memory' && (
-            <SettingsMemoryTab
-              onOpen={(accountId, chatKey) => {
-                onClose();
-                onOpenMemory?.(accountId, chatKey);
-              }}
-            />
-          )}
 
           {tab === 'about' && (
             <div className="space-y-3 text-[13px]" style={{ color: 'var(--text)' }}>

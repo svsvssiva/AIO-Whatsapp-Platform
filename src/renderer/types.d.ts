@@ -3,11 +3,8 @@ import type {
   AccountStorageInfo,
   AISettings,
   AppSettings,
-  ChatMemoryMeta,
   NotificationPrefs,
   PillPrefs,
-  PreparedPayload,
-  ScrapedConversation,
   UpdateStatus,
 } from '../shared/types';
 
@@ -45,50 +42,12 @@ interface GChatAPI {
     setKey: (key: string) => Promise<{ ok: boolean; error?: string }>;
     clearKey: () => Promise<{ ok: boolean }>;
     testKey: () => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
-    scrapeActive: (
-      accountId: string,
-    ) => Promise<{ ok: boolean; data?: ScrapedConversation; error?: string }>;
-    generate: (
-      conversation: ScrapedConversation,
-      accountId?: string,
-    ) => Promise<{ ok: true; text: string } | { ok: false; code: string; error: string }>;
-    prepare: (
-      conversation: ScrapedConversation,
-      accountId?: string,
-    ) => Promise<{ ok: true; payload: PreparedPayload } | { ok: false; code: string; error: string }>;
-    generateFromPayload: (
-      payload: PreparedPayload,
-    ) => Promise<{ ok: true; text: string } | { ok: false; code: string; error: string }>;
-    insertText: (accountId: string, text: string) => Promise<{ ok: boolean; error?: string }>;
-    showSuggestion: (accountId: string, text: string) => Promise<{ ok: boolean; error?: string }>;
-    clearSuggestion: (accountId: string) => Promise<{ ok: boolean }>;
   };
 
   pills: {
     getPrefs: () => Promise<PillPrefs>;
     list: (accountId: string) => Promise<string[]>;
     setPrefs: (patch: Partial<PillPrefs>) => Promise<PillPrefs>;
-  };
-
-  memory: {
-    get: (accountId: string, chatKey: string) => Promise<{ ok: boolean; content: string; exists: boolean }>;
-    save: (accountId: string, chatKey: string, content: string) => Promise<{ ok: boolean; bytes: number; updatedAt: number }>;
-    create: (accountId: string, chatKey: string) => Promise<{ ok: boolean; content: string }>;
-    delete: (accountId: string, chatKey: string) => Promise<{ ok: boolean }>;
-    listForAccount: (accountId: string) => Promise<ChatMemoryMeta[]>;
-    listAll: () => Promise<ChatMemoryMeta[]>;
-    reveal: () => Promise<{ ok: boolean }>;
-    openFile: (accountId: string, chatKey: string) => Promise<{ ok: boolean }>;
-    aiSync: (
-      accountId: string,
-    ) => Promise<{ ok: true; added: number; content: string } | { ok: false; error: string; code?: string }>;
-    onOpenDrawer: (cb: (accountId: string, chatKey: string) => void) => () => void;
-  };
-
-  aiLockout: {
-    get: (accountId: string) => Promise<string[]>;
-    isLocked: (accountId: string, chatKey: string) => Promise<boolean>;
-    onChanged: (cb: (accountId: string, chatKey: string, locked: boolean) => void) => () => void;
   };
 
   update: {

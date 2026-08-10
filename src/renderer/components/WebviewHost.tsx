@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { Account } from '../../shared/types';
 import { WA_URL, WA_USER_AGENT, partitionFor } from '../../shared/types';
-import { AiReply } from './AiReply';
 
 interface Props {
   account: Account;
@@ -60,17 +59,9 @@ interface HostProps {
   accounts: Account[];
   activeId: string | null;
   reloadKeys: Record<string, number>;
-  onOpenSettings: () => void;
-  aiReplyRef?: React.MutableRefObject<{ trigger: () => void } | null>;
 }
 
-export const WebviewHost: React.FC<HostProps> = ({
-  accounts,
-  activeId,
-  reloadKeys,
-  onOpenSettings,
-  aiReplyRef,
-}) => {
+export const WebviewHost: React.FC<HostProps> = ({ accounts, activeId, reloadKeys }) => {
   return (
     <div className="relative flex-1">
       {accounts.map((a) => (
@@ -81,7 +72,6 @@ export const WebviewHost: React.FC<HostProps> = ({
           reloadKey={reloadKeys[a.id] ?? 0}
         />
       ))}
-      <AiReply onOpenSettings={onOpenSettings} triggerRef={aiReplyRef} />
     </div>
   );
 };

@@ -1,13 +1,6 @@
-import type { AISettings, ScrapedConversation, ScrapedMessage } from '../../shared/types';
-import { DEFAULT_REDACTION_PREFS } from '../../shared/types';
-import { buildSystemPrompt, textOnly, lastTextInbound } from './prompts';
-import { AIError, generate as openaiGenerate, ping as openaiPing, OpenAIMessage } from './providers/openai';
+import type { AISettings, RephraseVariant } from '../../shared/types';
+import { AIError, generate as openaiGenerate, ping as openaiPing } from './providers/openai';
 import { loadKey } from './keys';
-import { applyRedaction } from './redact';
-import type { PreparedPayload } from './prepare';
-
-export { prepareGeneration } from './prepare';
-export type { PreparedPayload, PreparedMessage } from './prepare';
 
 export { AIError };
 
@@ -23,113 +16,119 @@ export async function testKey(): Promise<{ ok: true } | { ok: false; error: stri
   }
 }
 
-export async function generateReply(
-  settings: AISettings,
-  conv: ScrapedConversation,
-  memory: string = '',
-): Promise<string> {
-  const key = await loadKey();
-  if (!key) throw new AIError('auth', 'No API key configured.');
+// The three rewrite angles, strongest-fidelity first. Every one of them must
+// keep the user's meaning, language and register — this is a grammar fixer, not
+// a tone changer.
+const VARIANT_SPECS = [
+  {
+    label: 'Minimal fix',
+    brief:
+      'Correct only what is actually wrong (grammar, spelling, word order, articles, tense). Change as few words as possible — if the draft is already correct, return it essentially unchanged.',
+  },
+  {
+    label: 'Smoother',
+    brief:
+      'Same tone and length, but phrased the way a fluent speaker would naturally say it. Fix awkward constructions.',
+  },
+  {
+    label: 'Clearer',
+    brief:
+      'Same tone, tightened so the point is unmistakable. You may reorder the sentence, but do not add or drop information.',
+  },
+];
 
-  const redaction = settings.redaction ?? DEFAULT_REDACTION_PREFS;
-  let totalRedacted = 0;
-  const redactedCats = new Set<string>();
-  const redact = (s: string) => {
-    const r = applyRedaction(s, redaction);
-    totalRedacted += r.count;
-    r.categories.forEach((c) => redactedCats.add(c));
-    return r.text;
-  };
+function buildPrompt(count: number): string {
+  const specs = VARIANT_SPECS.slice(0, Math.max(1, Math.min(count, VARIANT_SPECS.length)));
+  const list = specs.map((v, i) => `${i + 1}. "${v.label}" — ${v.brief}`).join('\n');
 
-  // Last N messages, then keep only real text — images, stickers, videos,
-  // voice notes and documents are dropped before anything reaches the model.
-  const trimmedRaw: ScrapedMessage[] = conv.messages.slice(-Math.max(3, settings.contextMessages));
-  const textMsgs: ScrapedMessage[] = textOnly(trimmedRaw).map((m) => ({ ...m, text: redact(m.text) }));
-  const lastInbound = lastTextInbound(textMsgs);
+  return `You are a writing assistant that fixes the language of short chat messages before they are sent.
 
-  const aboutMeRedacted = redact(settings.aboutMe || '');
-  const memoryRedacted = redact(memory);
+You will be given ONE draft message. Rewrite it ${specs.length} different ways.
 
-  const sys = buildSystemPrompt({
-    settings,
-    chatTitle: conv.chatTitle || 'this chat',
-    isGroup: conv.isGroup,
-    transcript: textMsgs,
-    lastInbound,
-    aboutMe: aboutMeRedacted,
-    memory: memoryRedacted,
-  });
+HARD RULES — these override everything else:
+- Preserve the meaning exactly. Never add facts, names, numbers, dates, prices, promises or commitments that are not already in the draft. Never remove any.
+- Write in the SAME language the draft is written in. If it is romanised Tamil, Malay, Tanglish or a mix, keep that same language and mix — do not translate it into English.
+- Preserve the writer's register. Casual stays casual. Do NOT make it corporate or formal, and do NOT add greetings, sign-offs, or pleasantries that were not there.
+- Keep any emoji the writer used, in a natural position.
+- Do NOT answer, continue or reply to the message. You are only rewriting the draft itself.
+- If the draft is a question, the rewrite stays a question.
 
-  // Real conversation array — the model sees turns as a proper dialogue.
-  // From OpenAI's POV: 'user' = the OTHER person (incoming), 'assistant' = our user (outgoing).
-  const convoMessages: OpenAIMessage[] = textMsgs.map<OpenAIMessage>((m) => {
-    if (m.direction === 'in') {
-      const senderTag = conv.isGroup && m.sender ? `${m.sender}: ` : '';
-      return { role: 'user', content: senderTag + m.text };
-    }
-    return { role: 'assistant', content: m.text };
-  });
+Produce exactly these variants, in this order:
+${list}
 
-  // Final nudge so the model produces a NEW reply (not just echo prior assistant)
-  convoMessages.push({
-    role: 'user',
-    content:
-      '[GChat] Now write the single best reply for me to send next. Output reply text only — no quotes, no preamble.',
-  });
-
-  const lengthBudget = settings.length === 'brief' ? 80 : settings.length === 'medium' ? 220 : 500;
-
-  console.log(
-    '[gchat-ai] generating with',
-    convoMessages.length,
-    'turns; last inbound =',
-    lastInbound ? `"${lastInbound.text.slice(0, 80)}"` : 'NONE',
-    '; redacted',
-    totalRedacted,
-    'item(s) [',
-    Array.from(redactedCats).join(', '),
-    ']',
-  );
-
-  return openaiGenerate(
-    key,
-    settings.model,
-    [{ role: 'system', content: sys }, ...convoMessages],
-    { maxTokens: lengthBudget, temperature: 0.7 },
-  );
+Respond with JSON only, in this shape:
+{"variants":[{"label":"<label>","text":"<rewritten message>"}]}`;
 }
 
-// Generate from a user-reviewed prepared payload. Sends the EXACT content
-// the user saw in the preview (after any edits they made).
-export async function generateFromPayload(
-  settings: AISettings,
-  payload: PreparedPayload,
-): Promise<string> {
+// Exported for unit testing.
+export function coerceVariants(raw: string, count: number): RephraseVariant[] {
+  const out: RephraseVariant[] = [];
+  try {
+    // Tolerate a fenced ```json block even though we ask for raw JSON.
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(cleaned) as { variants?: Array<{ label?: string; text?: string }> };
+    for (const v of parsed.variants ?? []) {
+      const text = (v.text ?? '').trim();
+      if (!text) continue;
+      out.push({ label: (v.label ?? '').trim() || VARIANT_SPECS[out.length]?.label || 'Option', text });
+    }
+  } catch {
+    /* fall through to the line-based fallback below */
+  }
+
+  if (out.length === 0) {
+    // Model ignored the JSON contract — salvage non-empty lines so the user
+    // still gets something usable rather than an error.
+    const lines = raw
+      .split('\n')
+      .map((l) => l.replace(/^\s*(?:[-*\d.)]+\s*)?/, '').trim())
+      .filter((l) => l.length > 0 && !/^\{|^\}|^"variants"/.test(l));
+    lines.slice(0, count).forEach((text, i) => {
+      out.push({ label: VARIANT_SPECS[i]?.label || `Option ${i + 1}`, text });
+    });
+  }
+
+  // Drop duplicates — the model often returns the same text when the draft is
+  // already correct, and three identical buttons is just noise.
+  const seen = new Set<string>();
+  return out.filter((v) => {
+    const k = v.text.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/**
+ * Rephrase a single draft message. The `draft` is text the user typed into the
+ * compose box — no conversation history, contacts or chat content is involved.
+ */
+export async function rephrase(settings: AISettings, draft: string): Promise<RephraseVariant[]> {
   const key = await loadKey();
   if (!key) throw new AIError('auth', 'No API key configured.');
 
-  const lengthBudget = settings.length === 'brief' ? 80 : settings.length === 'medium' ? 220 : 500;
+  const text = draft.trim();
+  if (!text) throw new AIError('unknown', 'Nothing to rephrase — the message box is empty.');
+  if (text.length > 2000) throw new AIError('unknown', 'That message is too long to rephrase (2000 character limit).');
 
-  const convoMessages: OpenAIMessage[] = payload.messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const count = Math.max(1, Math.min(settings.variantCount || 3, VARIANT_SPECS.length));
 
-  convoMessages.push({ role: 'user', content: payload.finalNudge });
-
-  console.log(
-    '[gchat-ai] generating from payload:',
-    convoMessages.length,
-    'turns; chat =',
-    payload.meta.chatTitle,
-    '; redactions seen in preview:',
-    payload.redactionSummary.total,
-  );
-
-  return openaiGenerate(
+  const raw = await openaiGenerate(
     key,
-    payload.model || settings.model,
-    [{ role: 'system', content: payload.systemPrompt }, ...convoMessages],
-    { maxTokens: lengthBudget, temperature: 0.7 },
+    settings.model,
+    [
+      { role: 'system', content: buildPrompt(count) },
+      { role: 'user', content: text },
+    ],
+    {
+      // Room for N rewrites of a chat-length message plus JSON scaffolding.
+      maxTokens: Math.min(1200, 220 * count + 200),
+      temperature: 0.4,
+      jsonMode: true,
+    },
   );
+
+  const variants = coerceVariants(raw, count);
+  if (variants.length === 0) throw new AIError('unknown', 'Could not read a rewrite from the model. Try again.');
+  return variants.slice(0, count);
 }

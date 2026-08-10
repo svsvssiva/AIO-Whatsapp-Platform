@@ -49,14 +49,11 @@ export const IPC = {
   AI_SET_KEY: 'ai:set-key',
   AI_CLEAR_KEY: 'ai:clear-key',
   AI_TEST_KEY: 'ai:test-key',
-  AI_GENERATE: 'ai:generate',
-  AI_INSERT_TEXT: 'ai:insert-text',
   AI_OPEN_SETTINGS: 'ai:open-settings',
-  AI_SCRAPE_ACTIVE: 'ai:scrape-active',
-  AI_PREPARE: 'ai:prepare',
-  AI_GENERATE_FROM_PAYLOAD: 'ai:generate-from-payload',
-  AI_SHOW_SUGGESTION: 'ai:show-suggestion',
-  AI_CLEAR_SUGGESTION: 'ai:clear-suggestion',
+  // Rephrase — the only path that sends anything to OpenAI, and it sends
+  // exclusively text the user typed into the compose box themselves.
+  REPHRASE_RUN: 'rephrase:run',
+  REPHRASE_RESULT: 'rephrase:result',
 
   PILLS_LIST: 'pills:list',
   PILLS_SET_PREFS: 'pills:set-prefs',
@@ -65,21 +62,6 @@ export const IPC = {
   CHAT_PINS_GET: 'chat-pins:get',
   CHAT_PINS_TOGGLE: 'chat-pins:toggle',
   CHAT_PINS_REQUEST_TOGGLE: 'chat-pins:request-toggle',
-
-  MEMORY_GET: 'memory:get',
-  MEMORY_SAVE: 'memory:save',
-  MEMORY_DELETE: 'memory:delete',
-  MEMORY_CREATE: 'memory:create',
-  MEMORY_LIST_FOR_ACCOUNT: 'memory:list-for-account',
-  MEMORY_LIST_ALL: 'memory:list-all',
-  MEMORY_REVEAL: 'memory:reveal',
-  MEMORY_OPEN_FILE: 'memory:open-file',
-  MEMORY_AI_SYNC: 'memory:ai-sync',
-  MEMORY_OPEN_DRAWER: 'memory:open-drawer',
-
-  AI_LOCKOUT_GET: 'ai-lockout:get',
-  AI_LOCKOUT_IS_LOCKED: 'ai-lockout:is-locked',
-  AI_LOCKOUT_CHANGED: 'ai-lockout:changed',
 
   UPDATE_STATUS: 'update:status',
   UPDATE_CHECK: 'update:check',
