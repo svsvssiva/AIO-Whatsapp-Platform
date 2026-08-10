@@ -44,17 +44,6 @@ export const IPC = {
   MENU_INSPECT_ACTIVE: 'menu:inspect-active',
   INSPECT_WEBVIEW: 'inspect:webview',
 
-  AI_GET_SETTINGS: 'ai:get-settings',
-  AI_SET_SETTINGS: 'ai:set-settings',
-  AI_SET_KEY: 'ai:set-key',
-  AI_CLEAR_KEY: 'ai:clear-key',
-  AI_TEST_KEY: 'ai:test-key',
-  AI_OPEN_SETTINGS: 'ai:open-settings',
-  // Rephrase — the only path that sends anything to OpenAI, and it sends
-  // exclusively text the user typed into the compose box themselves.
-  REPHRASE_RUN: 'rephrase:run',
-  REPHRASE_RESULT: 'rephrase:result',
-
   PILLS_LIST: 'pills:list',
   PILLS_SET_PREFS: 'pills:set-prefs',
   PILLS_GET_PREFS: 'pills:get-prefs',

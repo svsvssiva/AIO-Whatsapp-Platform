@@ -1,7 +1,6 @@
 import type {
   Account,
   AccountStorageInfo,
-  AISettings,
   AppSettings,
   NotificationPrefs,
   PillPrefs,
@@ -35,14 +34,6 @@ interface GChatAPI {
   onMenuReloadActive: (cb: () => void) => () => void;
   onMenuQuickSwitch: (cb: () => void) => () => void;
   onMenuInspectActive: (cb: () => void) => () => void;
-
-  ai: {
-    getSettings: () => Promise<AISettings>;
-    setSettings: (patch: Partial<AISettings>) => Promise<AISettings>;
-    setKey: (key: string) => Promise<{ ok: boolean; error?: string }>;
-    clearKey: () => Promise<{ ok: boolean }>;
-    testKey: () => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
-  };
 
   pills: {
     getPrefs: () => Promise<PillPrefs>;

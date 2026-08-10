@@ -3,7 +3,6 @@ import { IPC } from '../shared/ipc';
 import type {
   Account,
   AccountStorageInfo,
-  AISettings,
   AppSettings,
   NotificationPrefs,
   PillPrefs,
@@ -112,17 +111,6 @@ const api = {
     const listener = () => cb();
     ipcRenderer.on(IPC.MENU_OPEN_SETTINGS, listener);
     return () => ipcRenderer.removeListener(IPC.MENU_OPEN_SETTINGS, listener);
-  },
-
-  ai: {
-    getSettings: (): Promise<AISettings> => ipcRenderer.invoke(IPC.AI_GET_SETTINGS),
-    setSettings: (patch: Partial<AISettings>): Promise<AISettings> =>
-      ipcRenderer.invoke(IPC.AI_SET_SETTINGS, patch),
-    setKey: (key: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC.AI_SET_KEY, key),
-    clearKey: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.AI_CLEAR_KEY),
-    testKey: (): Promise<{ ok: true } | { ok: false; error: string; code?: string }> =>
-      ipcRenderer.invoke(IPC.AI_TEST_KEY),
   },
 
   pills: {

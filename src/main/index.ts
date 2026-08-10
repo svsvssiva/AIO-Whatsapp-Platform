@@ -4,13 +4,11 @@ import { IPC } from '../shared/ipc';
 import {
   addAccount,
   getAccounts,
-  getAiSettings,
   getChatPins,
   getPillPrefs,
   getSettings,
   getWindowState,
   removeAccount,
-  saveAiSettings,
   savePillPrefs,
   saveSettings,
   saveWindowState,
@@ -39,10 +37,7 @@ import { clearAllData, clearCache, getAllStorageInfo, runAutoCleanIfDue } from '
 import { injectDebugHelper, injectNotificationPatch } from './notifications';
 import { detectPillsInWebview, injectWaTweaks, pollPendingPinToggle } from './wa-tweaks';
 import type { PillPrefs } from '../shared/types';
-import { AIError, rephrase, testKey as aiTestKey } from './ai';
-import { clearKey as aiClearKey, hasKey as aiHasKey, saveKey as aiSaveKey } from './ai/keys';
 import { checkNow as updateCheckNow, getCurrentStatus as getUpdateStatus, installUpdateNow, openDownloadPage, startUpdater } from './updater';
-import type { AISettings } from '../shared/types';
 
 registerAvatarSchemePrivileged();
 
@@ -374,70 +369,6 @@ ipcMain.on(IPC.NOTIF_CLICKED, (_e, accountId: string) => {
   if (!win.isVisible()) win.show();
   win.focus();
   win.webContents.send(IPC.MENU_SWITCH_ACCOUNT, accountId);
-});
-
-// -------------------- AI --------------------
-
-ipcMain.handle(IPC.AI_GET_SETTINGS, async () => {
-  const s = getAiSettings();
-  return { ...s, hasApiKey: await aiHasKey() } as AISettings;
-});
-
-ipcMain.handle(IPC.AI_SET_SETTINGS, async (_e, patch: Partial<AISettings>) => {
-  // Strip hasApiKey — that's computed
-  const { hasApiKey: _ignore, ...rest } = patch as Partial<AISettings> & { hasApiKey?: boolean };
-  saveAiSettings(rest);
-  const s = getAiSettings();
-  return { ...s, hasApiKey: await aiHasKey() } as AISettings;
-});
-
-ipcMain.handle(IPC.AI_SET_KEY, async (_e, key: string) => {
-  const trimmed = (key || '').trim();
-  if (!trimmed) return { ok: false, error: 'Empty key.' };
-  try {
-    await aiSaveKey(trimmed);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
-});
-
-ipcMain.handle(IPC.AI_CLEAR_KEY, async () => {
-  await aiClearKey();
-  return { ok: true };
-});
-
-ipcMain.handle(IPC.AI_TEST_KEY, async () => aiTestKey());
-
-// Rephrase: the ONLY place this app sends anything to OpenAI. `draft` is the
-// text the user typed into the compose box — no chat history is read.
-ipcMain.on(IPC.REPHRASE_RUN, async (e, _accountId: string, draft: string) => {
-  const reply = (payload: unknown) => {
-    if (!e.sender.isDestroyed()) e.sender.send(IPC.REPHRASE_RESULT, payload);
-  };
-  try {
-    const settings = getAiSettings();
-    if (!settings.enabled) {
-      reply({ ok: false, error: 'Rephrase is turned off in Settings → Rephrase.' });
-      return;
-    }
-    if (!(await aiHasKey())) {
-      reply({ ok: false, error: 'No OpenAI API key set — add one in Settings → Rephrase.' });
-      return;
-    }
-    const variants = await rephrase(settings, draft);
-    reply({ ok: true, variants });
-  } catch (err) {
-    const msg =
-      err instanceof AIError
-        ? err.code === 'auth'
-          ? 'API key rejected — check it in Settings → Rephrase.'
-          : err.code === 'rate'
-            ? 'OpenAI rate limit or quota exceeded.'
-            : err.message
-        : (err as Error).message;
-    reply({ ok: false, error: msg });
-  }
 });
 
 // PILLS IPC: detect + customize WA filter pills order

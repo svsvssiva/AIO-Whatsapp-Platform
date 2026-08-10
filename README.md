@@ -1,16 +1,15 @@
 # GChat
 
-**Multi-account WhatsApp Web for macOS — with native spell checking and an AI rephrase helper that never reads your chats.**
+**Multi-account WhatsApp Web for macOS — with native spell checking, unlimited chat pins, and no cloud services of its own.**
 
 GChat is a native macOS app that lets you run multiple WhatsApp Web sessions side-by-side in a single window. Each account runs in its own isolated Chromium partition, so logging into one doesn't affect another. The real `web.whatsapp.com` is loaded inside each session — no protocol reverse engineering, no ban risk, full feature parity with the official WhatsApp Web (media, voice, video calls, status, reactions, polls).
 
 On top of that:
 - **Unlimited chat pins** — WhatsApp caps them at 3.
 - **macOS spell checking** in the message box, which WhatsApp Web disables by default.
-- **Rephrase** — fix the English (or Tanglish, Malay, …) of a message *you* typed, using your own OpenAI key.
 - **Per-account** avatars, colours, notification prefs, and a unified Dock badge.
 
-> **Your conversations are never sent anywhere.** GChat does not read, scrape, summarise or upload your chat history. The only text that ever reaches OpenAI is the draft you have typed into the message box, and only when you click **Rephrase**. See [Privacy](#privacy--security).
+> **No AI, no accounts, no telemetry.** GChat has no service of its own. It does not read, scrape, summarise or upload your messages, and it holds no API keys. The app talks to exactly two hosts: WhatsApp (as your browser would) and GitHub (to check for a new version). See [Privacy](#privacy--security).
 
 ---
 
@@ -61,28 +60,7 @@ WhatsApp Web ships its composer with `spellcheck="false"`, which suppresses macO
 - Right-click a squiggle for **suggestions** and **Learn Spelling**.
 - Standard **Undo / Cut / Copy / Paste / Select All** in the same context menu (Electron ships no default menu, so without this right-click did nothing).
 
-On macOS this uses the **system spell checker** (`NSSpellChecker`), so it follows the languages set in System Settings and respects words you've already taught macOS. Nothing is sent anywhere — spell checking is entirely local.
-
-### Rephrase (BYOK — bring your own OpenAI key)
-
-Set up once in **Settings → Rephrase**: paste your OpenAI API key (stored encrypted in the macOS Keychain via Electron's `safeStorage`) and pick a model (`gpt-4o-mini` by default — cheap).
-
-Then in any chat:
-1. Type your message as usual.
-2. A slim bar appears directly above the message box with a **✨ Rephrase** button (or press `⌘⇧R`).
-3. You get up to 3 corrected versions:
-
-   | Option | What it does |
-   |---|---|
-   | **Minimal fix** | Corrects only what's actually wrong. Changes as few words as possible. |
-   | **Smoother** | Same tone and length, phrased the way a fluent speaker would say it. |
-   | **Clearer** | Same tone, tightened so the point is unmistakable. |
-
-4. Click one to replace your draft. You still press Enter yourself to send.
-
-It is a **writing corrector, not a tone changer**. Every option preserves your meaning, your register (casual stays casual — no corporate rewrites, no invented greetings or sign-offs), and your language: a romanised Tamil, Malay or mixed-language draft comes back in that same language rather than translated into English. It never adds facts, names, numbers or commitments that weren't in your draft.
-
-The bar sits in normal page flow, so it never covers your messages, and it clears itself when you switch chats.
+On macOS this uses the **system spell checker** (`NSSpellChecker`), so it follows the languages set in System Settings and respects words you've already taught macOS. Nothing is sent anywhere — spell checking is entirely local and works offline.
 
 ### Notifications
 
@@ -101,23 +79,25 @@ Updates are **download-and-install-yourself**, not silent auto-install: macOS on
 
 ## Privacy & security
 
-**What leaves your Mac:**
+**Everything GChat sends anywhere:**
 
 | Data | Goes where | When |
 |---|---|---|
-| The draft you typed in the message box | OpenAI | Only when you click **Rephrase** |
 | Your WhatsApp traffic | Meta's servers | Same as using `web.whatsapp.com` in Chrome |
 | A version check | This GitHub repo | On launch, then hourly |
 
-**What never leaves your Mac:** your conversation history, contacts, received messages, media, or anything you haven't typed into the compose box and explicitly asked to be rephrased. There is no chat scraping in the codebase — a single call site in `src/main/ai/index.ts` performs the only OpenAI request the app can make.
+That's the complete list. GChat has no backend, no account system, no analytics, and no AI integration — there is no code path that can upload a message. Your conversations, contacts and media never leave the machine except through WhatsApp itself.
 
-- **API key** is encrypted via Electron's `safeStorage` (macOS Keychain). It never reaches the renderer or the webview; all OpenAI calls happen in the main process.
 - **Spell checking is local** — handled by macOS, no network involved.
 - **WhatsApp data** lives in per-account Chromium partitions under `~/Library/Application Support/gchat/Partitions/`. Standard Chromium encryption-at-rest, same as Chrome on macOS.
 - **No telemetry**, no usage analytics, no third-party SDKs.
 - The build is ad-hoc signed but **not notarized**, so Gatekeeper warns once per version. Proper signing needs an Apple Developer ID ($99/year).
 
-> **Removed in v0.2.0:** earlier versions had an AI reply feature that read your conversation, per-chat memory notes, and a credential-redaction pipeline to scrub what was uploaded. All of it is gone. If you're upgrading, old memory notes may still sit in `~/Library/Application Support/gchat/memory/` — the app no longer reads or writes them, and you can delete that folder.
+> **Upgrading from an older version?** v0.2.0 removed the AI reply and per-chat memory features; v0.3.0 removed the last one (Rephrase). The app no longer reads or writes any of their data. Leftovers you can safely delete:
+> - `~/Library/Application Support/gchat/memory/` — old per-chat notes
+> - `~/Library/Application Support/gchat/ai-key.bin` — the encrypted OpenAI key
+>
+> Old `ai` settings are stripped from the config automatically on first launch.
 
 ---
 
@@ -157,21 +137,20 @@ GH_TOKEN=github_pat_xxx npm run release
 - **Electron 33** wraps Chromium + Node into a native macOS app.
 - **React 18 + TypeScript + Vite** for the shell UI.
 - Each account = an Electron `<webview>` with `partition="persist:wa-<accountId>"`. Chromium isolates everything per partition: cookies, IndexedDB, localStorage, service workers, cache.
-- **In-page UI** (chat pins, the Rephrase bar, forced spellcheck) is injected into `web.whatsapp.com` as a main-world script from `wa-tweaks.ts`.
-- **Rephrase flow:** the injected bar reads only the compose box and dispatches a DOM event with that text → the webview preload (isolated world) forwards it over IPC → the main process calls OpenAI → variants come back the same way and render in the bar.
+- **In-page UI** (chat pins, forced spellcheck) is injected into `web.whatsapp.com` as a main-world script from `wa-tweaks.ts`.
+- **Spell check** is enabled per session in `partitions.ts`; the context menu with suggestions is built in `main/index.ts` on the webview's `context-menu` event.
 - **Custom protocol** `gchat-avatar://` serves per-account avatar images without exposing the file system to the renderer.
 
 ```
 src/
 ├── main/                  Electron main process
-│   ├── ai/                OpenAI provider + rephrase (the only outbound AI call)
 │   ├── notifications.ts   Native notification labeling
 │   ├── partitions.ts      Per-account sessions + spell checker
-│   ├── wa-tweaks.ts       Injected scripts (chat pins, spellcheck, Rephrase bar)
+│   ├── wa-tweaks.ts       Injected scripts (chat pins, spellcheck)
 │   └── updater.ts         electron-updater wiring
 ├── preload/               contextBridge APIs
 │   ├── shell.ts           Main shell window APIs
-│   └── webview-wa.ts      Per-webview helpers (unread detection, rephrase bridge)
+│   └── webview-wa.ts      Per-webview helpers (unread detection)
 ├── renderer/              React UI
 │   └── components/        AccountRail, WebviewHost, SettingsPanel, UpdateBanner, …
 └── shared/                Types + IPC channel constants
@@ -182,7 +161,7 @@ src/
 ## Known limits
 
 - **WhatsApp's 4-device-per-number cap** is a WhatsApp rule, not ours. One phone number can be linked to at most 4 GChat tiles at once. To have more accounts, use more phone numbers.
-- **WhatsApp Web UI changes** can break the DOM integrations (unread badge detection, chat-pin overlay, the Rephrase bar's anchor to the compose box). All selectors live in `src/main/wa-tweaks.ts` and `src/preload/webview-wa.ts` for fast patching. Use **View → Inspect Active Account** in the app menu to debug live.
+- **WhatsApp Web UI changes** can break the DOM integrations (unread badge detection, chat-pin overlay, the forced `spellcheck` attribute). All selectors live in `src/main/wa-tweaks.ts` and `src/preload/webview-wa.ts` for fast patching. Use **View → Inspect Active Account** in the app menu to debug live.
 - **Gatekeeper prompt** on first launch of each version, because the build isn't notarized.
 - **macOS only** for now. Electron can target Windows and Linux, but the build config is Mac-only and the design tokens are macOS-native.
 - **WhatsApp Web's own constraints apply** — same connectivity issues, same disk-cache growth, same occasional "device logged out" prompts as using web.whatsapp.com in Chrome.
@@ -191,7 +170,6 @@ src/
 
 ## Roadmap (maybe)
 
-- More rephrase styles (professional / concise / friendly) alongside the grammar-fix options
 - Custom app icon (currently the default Electron icon)
 - Apple Developer ID signing + notarization, which would enable silent auto-updates
 - Anthropic / Gemini / local Ollama support behind the existing provider interface

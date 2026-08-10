@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Sparkles, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { SettingsAiTab } from './SettingsAiTab';
+import { X, Bell, HardDrive, Info, Image as ImageIcon, RotateCcw, Trash2, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
 import type { AccountStorageInfo, AppSettings, NotificationPrefs, UpdateStatus } from '../../shared/types';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../shared/types';
 import { useAccountsStore } from '../stores/accountsStore';
@@ -10,7 +9,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = 'notifications' | 'storage' | 'ai' | 'about';
+type Tab = 'notifications' | 'storage' | 'about';
 
 function fmt(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -91,7 +90,6 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
           {([
             ['notifications', Bell, 'Notifications'],
             ['storage', HardDrive, 'Storage'],
-            ['ai', Sparkles, 'Rephrase'],
             ['about', Info, 'About'],
           ] as Array<[Tab, typeof Bell, string]>).map(([key, Icon, label]) => (
             <button
@@ -269,8 +267,6 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
               </details>
             </div>
           )}
-
-          {tab === 'ai' && <SettingsAiTab />}
 
           {tab === 'about' && (
             <div className="space-y-3 text-[13px]" style={{ color: 'var(--text)' }}>

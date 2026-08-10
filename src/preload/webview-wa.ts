@@ -168,20 +168,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (id) ipcRenderer.send(IPC.NOTIF_CLICKED, id);
   });
 
-  // ---------- Rephrase bridge ----------
-  // The in-page UI (injected into the main world by wa-tweaks) can't reach IPC,
-  // so it dispatches a DOM event carrying ONLY the draft the user typed. We
-  // forward that to main and hand the variants back the same way.
-  document.addEventListener('gchat:rephrase-request', (e: Event) => {
-    const detail = (e as CustomEvent).detail as { text?: string } | undefined;
-    const text = (detail?.text || '').trim();
-    if (!text) return;
-    ipcRenderer.send(IPC.REPHRASE_RUN, accountId, text);
-  });
-});
-
-ipcRenderer.on(IPC.REPHRASE_RESULT, (_e, payload: unknown) => {
-  document.dispatchEvent(new CustomEvent('gchat:rephrase-result', { detail: payload }));
 });
 
 console.log('[gchat-wa] preload loaded; accountId =', accountId);

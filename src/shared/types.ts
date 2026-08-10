@@ -20,19 +20,6 @@ export interface Account {
   notifications?: NotificationPrefs;
 }
 
-// AI is used for ONE thing only: rephrasing text the user has typed themselves.
-// Conversations are never read or sent anywhere.
-export interface AISettings {
-  enabled: boolean;
-  hasApiKey: boolean; // computed view, never the key itself
-  model: string;
-  variantCount: number; // how many rephrase options to return
-}
-
-export interface RephraseVariant {
-  label: string; // e.g. "Minimal fix"
-  text: string;
-}
 
 export type UpdateStatus =
   | { state: 'idle' }
@@ -42,13 +29,6 @@ export type UpdateStatus =
   | { state: 'ready'; version: string }
   | { state: 'error'; error: string }
   | { state: 'disabled-dev' };
-
-export const DEFAULT_AI_SETTINGS: AISettings = {
-  enabled: false,
-  hasApiKey: false,
-  model: 'gpt-4o-mini',
-  variantCount: 3,
-};
 
 export interface PillPrefs {
   order: string[]; // labels in desired left-to-right order
@@ -63,7 +43,6 @@ export interface AppSettings {
   autoCleanMaxAgeDays: number;
   lastAutoCleanAt: number;
   perAccountLastCleanAt: Record<string, number>;
-  ai: AISettings;
   pills: PillPrefs;
   chatPins: Record<string, string[]>; // accountId → list of pinned chat keys
 }
@@ -74,17 +53,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoCleanMaxAgeDays: 60,
   lastAutoCleanAt: 0,
   perAccountLastCleanAt: {},
-  ai: DEFAULT_AI_SETTINGS,
   pills: DEFAULT_PILL_PREFS,
   chatPins: {},
 };
-
-export const AI_MODELS = [
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Fast & cheap — recommended' },
-  { id: 'gpt-4o', label: 'GPT-4o', hint: 'Smartest, ~10× the cost' },
-  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', hint: 'Older flagship' },
-  { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', hint: 'Legacy, cheapest' },
-] as const;
 
 export interface AccountStorageInfo {
   accountId: string;
