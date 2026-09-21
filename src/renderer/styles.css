@@ -59,6 +59,12 @@ button:focus-visible {
 }
 .tile:hover {
   transform: scale(1.04);
+}
+/* Inactive account tiles dim their face only, never the unread badge on top */
+.tile-face {
+  transition: opacity 160ms ease-out;
+}
+.tile:hover .tile-face {
   opacity: 1 !important;
 }
 

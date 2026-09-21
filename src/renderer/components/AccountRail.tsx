@@ -16,7 +16,9 @@ export const AccountRail: React.FC<Props> = ({ onAdd, onOpenSettings }) => {
       className="flex flex-col items-center py-2.5 border-r"
       style={{ width: 64, borderColor: 'var(--rail-divider)' }}
     >
-      <div className="flex-1 flex flex-col items-center gap-3 overflow-y-auto w-full">
+      {/* pt-1: the scroll container clips overflow, and the first tile's
+          unread badge sits 4px above the tile */}
+      <div className="flex-1 flex flex-col items-center gap-3 overflow-y-auto w-full pt-1">
         {accounts.map((a) => (
           <AccountTile
             key={a.id}

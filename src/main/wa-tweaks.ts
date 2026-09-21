@@ -37,13 +37,11 @@ export function injectWaTweaks(wc: WebContents, opts: InjectOpts) {
     '  display:flex !important;',
     '  align-items:center;',
     '  justify-content:center;',
-    '  background:rgba(11,20,26,0.7);',
+    '  background:rgba(11,20,26,0.92);',
     '  color:rgba(233,237,239,0.7);',
     '  cursor:pointer;',
     '  z-index:20;',
     '  border:1px solid rgba(255,255,255,0.08);',
-    '  backdrop-filter:blur(6px);',
-    '  -webkit-backdrop-filter:blur(6px);',
     '  padding:0;',
     '  opacity:0;',
     '  transition:opacity 140ms, background 140ms, color 140ms, transform 80ms;',
@@ -67,13 +65,22 @@ export function injectWaTweaks(wc: WebContents, opts: InjectOpts) {
 
   // WhatsApp ships its composer with spellcheck disabled, which suppresses the
   // macOS spell checker entirely. Force it on — and keep forcing it, because WA
-  // re-renders the box (on chat switch, after sending, etc).
-  function forceSpellcheck() {
-    var boxes = document.querySelectorAll('div[contenteditable="true"]');
+  // re-renders the box (on chat switch, after sending, etc). A focusin listener
+  // covers every re-render for free; polling the whole document for this was
+  // pure waste, since the attribute only matters on the box you're typing in.
+  function forceSpellcheck(root) {
+    var boxes = (root || document).querySelectorAll('div[contenteditable="true"]');
     for (var i = 0; i < boxes.length; i++) {
       if (boxes[i].getAttribute('spellcheck') !== 'true') boxes[i].setAttribute('spellcheck', 'true');
     }
   }
+
+  document.addEventListener('focusin', function(e) {
+    var t = e.target;
+    if (t && t.getAttribute && t.getAttribute('contenteditable') === 'true') {
+      if (t.getAttribute('spellcheck') !== 'true') t.setAttribute('spellcheck', 'true');
+    }
+  }, true);
 
   // ================= chat pins =================
   function chatRowKey(row) {
@@ -118,6 +125,11 @@ export function injectWaTweaks(wc: WebContents, opts: InjectOpts) {
       e.preventDefault();
       e.stopPropagation();
       window.__gchatPendingPinToggle = key;
+      // Push straight to main via the isolated-world preload instead of
+      // waiting to be polled.
+      try {
+        document.dispatchEvent(new CustomEvent('gchat:pin-toggle', { detail: { key: key } }));
+      } catch (err) {}
     }, true);
     row.appendChild(btn);
   }
@@ -169,22 +181,34 @@ export function injectWaTweaks(wc: WebContents, opts: InjectOpts) {
     forceSpellcheck();
   }
 
+  // Watch only the chat list, not the whole document. WhatsApp mutates the
+  // message pane, timestamps and presence text constantly; observing all of
+  // <body> (and characterData) meant Blink built mutation records for every
+  // one of those, all day, in every account.
+  var observed = null;
+  function ensureObserver() {
+    var pane = document.getElementById('pane-side');
+    if (!pane || pane === observed) return;
+    observed = pane;
+    var debounce = null;
+    new MutationObserver(function() {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(tick, 250);
+    }).observe(pane, { childList: true, subtree: true });
+    tick();
+  }
+
   window.__gchatRetweak = tick;
   window.__gchatPendingPinToggle = window.__gchatPendingPinToggle || null;
 
   tick();
-  setTimeout(tick, 600);
-  setTimeout(tick, 2000);
+  ensureObserver();
+  setTimeout(ensureObserver, 600);
+  setTimeout(ensureObserver, 2000);
 
-  var debounce = null;
-  var mo = new MutationObserver(function() {
-    if (debounce) clearTimeout(debounce);
-    debounce = setTimeout(tick, 250);
-  });
-  mo.observe(document.body, { childList: true, subtree: true });
-
-  // safety: re-apply periodically in case WA virtualizer fights us
-  setInterval(tick, 500);
+  // #pane-side doesn't exist on the QR screen and is rebuilt on logout/login,
+  // so re-check occasionally. Once attached this is a single getElementById.
+  setInterval(ensureObserver, 10000);
 
   console.log('[gchat-wa-tweaks] installed (pins + spellcheck)');
   return 'installed';
@@ -196,14 +220,4 @@ export function injectWaTweaks(wc: WebContents, opts: InjectOpts) {
 export async function detectPillsInWebview(_wc: WebContents): Promise<string[]> {
   // No longer used (filter row tweaks reverted). Stub returns empty.
   return [];
-}
-
-export async function pollPendingPinToggle(wc: WebContents): Promise<string | null> {
-  try {
-    const script = `(function(){ var k = window.__gchatPendingPinToggle; window.__gchatPendingPinToggle = null; return k || null; })();`;
-    const r = (await wc.executeJavaScript(script, true)) as string | null;
-    return r || null;
-  } catch {
-    return null;
-  }
 }

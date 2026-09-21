@@ -1,3 +1,4 @@
+import './devProfile'; // must run before anything resolves userData
 import { app, BrowserWindow, ipcMain, shell, nativeTheme, Menu, MenuItem } from 'electron';
 import { join } from 'path';
 import { IPC } from '../shared/ipc';
@@ -35,15 +36,18 @@ import {
 } from './avatars';
 import { clearAllData, clearCache, getAllStorageInfo, runAutoCleanIfDue } from './storage';
 import { injectDebugHelper, injectNotificationPatch } from './notifications';
-import { detectPillsInWebview, injectWaTweaks, pollPendingPinToggle } from './wa-tweaks';
+import { detectPillsInWebview, injectWaTweaks } from './wa-tweaks';
 import type { PillPrefs } from '../shared/types';
 import { checkNow as updateCheckNow, getCurrentStatus as getUpdateStatus, installUpdateNow, openDownloadPage, startUpdater } from './updater';
 
 registerAvatarSchemePrivileged();
 
-app.commandLine.appendSwitch('disable-background-timer-throttling');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+// NOTE: we deliberately do NOT disable Chromium's background throttling here.
+// Doing so keeps every WhatsApp webview running at full speed even when GChat
+// is hidden behind another window, which is a large battery cost for an app
+// that is idle most of the day. Notifications are unaffected: they arrive over
+// WhatsApp's WebSocket and go through the patched window.Notification, both of
+// which are event-driven and never throttled.
 
 let win: BrowserWindow | null = null;
 const unreadByAccount = new Map<string, number>();
@@ -129,6 +133,18 @@ function createWindow() {
   });
 
   win.webContents.on('did-attach-webview', (_e, wc) => {
+    // A preload that throws (say, a require() the sandbox can't satisfy) fails
+    // silently otherwise — and the unread badge is the only feature living in
+    // it. Make that loud, and echo the preload's own log lines while at it.
+    wc.on('preload-error', (_ev, preloadPath, error) => {
+      console.error('[gchat-main] webview preload failed:', preloadPath, error);
+    });
+    wc.on('console-message', (ev, ...legacy: unknown[]) => {
+      // Electron ≥32 puts the text on the event; older versions pass it positionally.
+      const text = (ev as unknown as { message?: string }).message ?? legacy[1];
+      if (typeof text === 'string' && text.startsWith('[gchat')) console.log('[wa]', text);
+    });
+
     wc.setWindowOpenHandler(({ url }) => {
       shell.openExternal(url);
       return { action: 'deny' };
@@ -284,12 +300,17 @@ ipcMain.handle(IPC.ACCOUNTS_LOGOUT, async (_e, id: string) => {
   return true;
 });
 
-ipcMain.on(IPC.UNREAD_REPORT, (e, accountId: string, count: number) => {
-  unreadByAccount.set(accountId, Math.max(0, count | 0));
+ipcMain.on(IPC.UNREAD_REPORT, (e, reportedId: string, count: number) => {
+  // Trust the sender over what the preload thinks its account is: the id it
+  // reads from process.argv is best-effort, the webContents → account map is not.
+  const accountId = accountIdForWc(e.sender) || reportedId;
+  if (!accountId) return;
+  const n = Math.max(0, count | 0);
+  unreadByAccount.set(accountId, n);
   recomputeBadge();
   if (win) {
     rebuildDockMenu(win, unreadByAccount);
-    win.webContents.send(IPC.UNREAD_UPDATED, accountId, count);
+    win.webContents.send(IPC.UNREAD_UPDATED, accountId, n);
   }
 });
 
@@ -364,7 +385,8 @@ ipcMain.handle(IPC.NOTIF_SET_PREFS, (_e, id: string, prefs) => {
 });
 
 // Notification click bubbled from webview
-ipcMain.on(IPC.NOTIF_CLICKED, (_e, accountId: string) => {
+ipcMain.on(IPC.NOTIF_CLICKED, (e, reportedId: string) => {
+  const accountId = accountIdForWc(e.sender) || reportedId;
   if (!win) return;
   if (!win.isVisible()) win.show();
   win.focus();
@@ -403,23 +425,36 @@ ipcMain.handle(IPC.CHAT_PINS_TOGGLE, (_e, accountId: string, chatKey: string) =>
   return next;
 });
 
-// Poll pending pin toggles from all WA webviews every 500ms
-function startInjectionPoller() {
-  setInterval(async () => {
-    const allWcs = require('electron').webContents.getAllWebContents() as Electron.WebContents[];
-    for (const [wcId, aid] of wcAccountId.entries()) {
-      const wc = allWcs.find((w) => w.id === wcId);
-      if (!wc) continue;
-      // Pin toggles
-      const key = await pollPendingPinToggle(wc);
-      if (key) {
-        const next = toggleChatPin(aid, key);
-        injectWaTweaks(wc, { prefs: getPillPrefs(), chatPins: next, accountId: aid });
-      }
+// Pin toggles are pushed from the webview preload the moment the button is
+// clicked. (This used to be a 500ms executeJavaScript poll against every
+// webview, which woke each renderer twice a second forever.)
+ipcMain.on(IPC.CHAT_PINS_REQUEST_TOGGLE, (e, accountId: string, chatKey: string) => {
+  if (!chatKey) return;
+  const aid = wcAccountId.get(e.sender.id) || accountId;
+  if (!aid) return;
+  const next = toggleChatPin(aid, chatKey);
+  injectWaTweaks(e.sender, { prefs: getPillPrefs(), chatPins: next, accountId: aid });
+});
+
+// Which account a WA webview belongs to. The renderer registers it on
+// dom-ready; before that (or if that never came) fall back to the partition
+// name baked into the session's storage path.
+function accountIdForWc(wc: Electron.WebContents): string {
+  const known = wcAccountId.get(wc.id);
+  if (known) return known;
+  try {
+    const sp = (wc.session as unknown as { storagePath?: string }).storagePath || '';
+    const m = sp.match(/persist%3Awa-([^/\\]+)/);
+    if (m) {
+      const id = decodeURIComponent(m[1]);
+      wcAccountId.set(wc.id, id);
+      return id;
     }
-  }, 500);
+  } catch {
+    /* ignore */
+  }
+  return '';
 }
-setTimeout(startInjectionPoller, 3000);
 
 function findWcForAccount(accountId: string): Electron.WebContents | undefined {
   const allWcs = require('electron').webContents.getAllWebContents() as Electron.WebContents[];
